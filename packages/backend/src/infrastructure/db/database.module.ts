@@ -15,6 +15,8 @@ import {
   InvoiceTypeOrmRepository,
   ProviderTypeOrmRepository,
   UserTypeOrmRepository,
+  UserCredentialTypeOrmRepository,
+  USER_CREDENTIAL_REPOSITORY,
   AuditEventTypeOrmRepository,
 } from './repositories';
 
@@ -54,12 +56,14 @@ import {
     { provide: 'InvoiceRepository', useClass: InvoiceTypeOrmRepository },
     { provide: 'ProviderRepository', useClass: ProviderTypeOrmRepository },
     { provide: 'UserRepository', useClass: UserTypeOrmRepository },
+    { provide: USER_CREDENTIAL_REPOSITORY, useClass: UserCredentialTypeOrmRepository },
     { provide: 'AuditEventRepository', useClass: AuditEventTypeOrmRepository },
   ],
   exports: [
     'InvoiceRepository',
     'ProviderRepository',
     'UserRepository',
+    USER_CREDENTIAL_REPOSITORY,
     'AuditEventRepository',
   ],
 })

@@ -6,12 +6,16 @@ import {
   InternalServerErrorException,
   Post,
   UploadedFile,
+  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { UploadInvoiceUseCase } from '../../../application/use-cases/upload-invoice.use-case';
 import { FileValidationPipe } from '../pipes/file-validation.pipe';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { CurrentUser } from '../guards/current-user.decorator';
+import type { AuthenticatedUser } from '../guards/jwt.strategy';
 
 export const UPLOAD_INVOICE_USE_CASE_TOKEN = 'UPLOAD_INVOICE_USE_CASE_TOKEN';
 
@@ -21,11 +25,10 @@ export const UPLOAD_INVOICE_USE_CASE_TOKEN = 'UPLOAD_INVOICE_USE_CASE_TOKEN';
  * Handles all HTTP requests related to invoices.
  * Contains no business logic — it only translates between HTTP and use cases.
  *
- * Auth note: uploaderId is hardcoded as a placeholder until FASE 8 adds
- * JWT authentication. At that point it will be replaced with the user id
- * extracted from the verified JWT token.
+ * All endpoints require a valid JWT (JwtAuthGuard).
  */
 @Controller('api/v1/invoices')
+@UseGuards(JwtAuthGuard)
 export class InvoicesController {
   constructor(
     @Inject(UPLOAD_INVOICE_USE_CASE_TOKEN)
@@ -41,6 +44,7 @@ export class InvoicesController {
    * touching the filesystem at this layer.
    *
    * Returns 201 Created with the invoice id and its initial status.
+   * The uploaderId is taken from the verified JWT (no more placeholder UUID).
    */
   @Post('upload')
   @HttpCode(HttpStatus.CREATED)
@@ -52,16 +56,15 @@ export class InvoicesController {
     }),
   )
   async upload(
+    @CurrentUser() user: AuthenticatedUser,
     @UploadedFile(new FileValidationPipe())
     file: Express.Multer.File,
   ) {
-    // TODO (FASE 8): replace with authenticated user id from JWT
-    const PLACEHOLDER_UPLOADER_ID = '00000000-0000-0000-0000-000000000001';
     // TODO (FASE 9): accept providerId from request body once providers exist
     const PLACEHOLDER_PROVIDER_ID = '00000000-0000-0000-0000-000000000002';
 
     const result = await this.uploadInvoiceUseCase.execute({
-      uploaderId: PLACEHOLDER_UPLOADER_ID,
+      uploaderId: user.userId,
       providerId: PLACEHOLDER_PROVIDER_ID,
       fileBuffer: file.buffer,
       mimeType: file.mimetype as 'application/pdf',

@@ -1,4 +1,4 @@
-import { INestApplication } from '@nestjs/common';
+import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
@@ -6,6 +6,8 @@ import {
   InvoicesController,
   UPLOAD_INVOICE_USE_CASE_TOKEN,
 } from '../invoices.controller';
+import { JwtAuthGuard } from '../../guards/jwt-auth.guard';
+import type { AuthenticatedUser } from '../../guards/jwt.strategy';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -19,6 +21,12 @@ function makePdfBuffer(): Buffer {
   return Buffer.from('%PDF-1.4 minimal test invoice', 'ascii');
 }
 
+/** Fake user injected by the mock guard into every request. */
+const FAKE_USER: AuthenticatedUser = {
+  userId: '00000000-0000-0000-0000-000000000001',
+  role: 'uploader',
+};
+
 // ---------------------------------------------------------------------------
 // Test module setup
 // ---------------------------------------------------------------------------
@@ -28,6 +36,8 @@ function makePdfBuffer(): Buffer {
  *
  * - The use case is replaced with a vi.fn() mock so tests control its output
  *   without needing a database or a real storage adapter.
+ * - JwtAuthGuard is replaced with a mock that always passes and injects a
+ *   fake AuthenticatedUser, so we don't need a real JWT or Passport setup.
  * - NestJS still wires up the full HTTP pipeline (interceptors, pipes, guards)
  *   so we're testing the real controller behaviour, not a stripped-down stub.
  * - Supertest sends actual HTTP requests to the in-memory NestJS server.
@@ -47,7 +57,18 @@ describe('InvoicesController (e2e)', () => {
           useValue: mockUploadUseCase,
         },
       ],
-    }).compile();
+    })
+      // Replace JwtAuthGuard with a guard that always allows access and
+      // injects the fake user so @CurrentUser() resolves correctly.
+      .overrideGuard(JwtAuthGuard)
+      .useValue({
+        canActivate: (ctx: ExecutionContext) => {
+          const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+          req.user = FAKE_USER;
+          return true;
+        },
+      })
+      .compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -65,7 +86,7 @@ describe('InvoicesController (e2e)', () => {
         invoiceId: 'inv-uuid-123',
         status: 'PENDING',
         filePath: 'some-uuid.pdf',
-        uploaderId: '00000000-0000-0000-0000-000000000001',
+        uploaderId: FAKE_USER.userId,
         providerId: '00000000-0000-0000-0000-000000000002',
         createdAt: new Date().toISOString(),
       };
@@ -87,6 +108,26 @@ describe('InvoicesController (e2e)', () => {
       expect(response.status).toBe(201);
       expect(response.body.data.invoiceId).toBe('inv-uuid-123');
       expect(response.body.data.status).toBe('PENDING');
+    });
+
+    it('should forward the userId from the JWT to the use case', async () => {
+      mockUploadUseCase.execute.mockResolvedValue({
+        isOk: () => true,
+        isErr: () => false,
+        value: { invoiceId: 'inv-x', status: 'PENDING' },
+      });
+
+      await request(app.getHttpServer())
+        .post('/api/v1/invoices/upload')
+        .attach('file', makePdfBuffer(), {
+          filename: 'invoice.pdf',
+          contentType: 'application/pdf',
+        });
+
+      const callArg = mockUploadUseCase.execute.mock.calls.at(-1)?.[0] as {
+        uploaderId: string;
+      };
+      expect(callArg.uploaderId).toBe(FAKE_USER.userId);
     });
 
     // --- missing file ---

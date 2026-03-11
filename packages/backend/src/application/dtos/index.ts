@@ -5,3 +5,4 @@ export * from './get-invoice.dto';
 export * from './list-invoices.dto';
 export * from './create-provider.dto';
 export * from './create-user.dto';
+export * from './auth.dto';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { UserNotFoundError, UnauthorizedError } from '../user.errors';
+import { UserNotFoundError, UnauthorizedError, InvalidCredentialsError } from '../user.errors';
 import { DomainError } from '../domain.error';
 
 describe('User Domain Errors', () => {
@@ -32,6 +32,16 @@ describe('User Domain Errors', () => {
 
       // Assert
       expect(error.action).toBe('delete provider');
+    });
+  });
+
+  describe('InvalidCredentialsError', () => {
+    it('should have correct code and a generic message', () => {
+      const error = new InvalidCredentialsError();
+
+      expect(error.code).toBe('INVALID_CREDENTIALS');
+      expect(error.message).toBe('Invalid email or password');
+      expect(error).toBeInstanceOf(DomainError);
     });
   });
 });

@@ -6,6 +6,7 @@ import {
   InvoiceDate,
   InvoiceStatusEnum,
 } from '../../value-objects';
+import { createExtractedData } from '../../test/factories';
 
 // Factory helper para no repetir props en cada test
 function makeValidProps() {
@@ -93,12 +94,12 @@ describe('Invoice', () => {
       invoice.startProcessing();
 
       // Act
-      const result = invoice.markExtracted({ rawText: 'extracted text' });
+      const result = invoice.markExtracted(createExtractedData({ rawText: 'extracted text' }));
 
       // Assert
       expect(result.isOk()).toBe(true);
       expect(invoice.getStatus().getValue()).toBe(InvoiceStatusEnum.EXTRACTED);
-      expect(invoice.getExtractedData()).toEqual({ rawText: 'extracted text' });
+      expect(invoice.getExtractedData()).toEqual(createExtractedData({ rawText: 'extracted text' }));
     });
 
     it('should return error when not in PROCESSING status', () => {
@@ -107,7 +108,7 @@ describe('Invoice', () => {
       // Still in PENDING
 
       // Act
-      const result = invoice.markExtracted({ rawText: 'text' });
+      const result = invoice.markExtracted(createExtractedData({ rawText: 'text' }));
 
       // Assert
       expect(result.isErr()).toBe(true);
@@ -122,7 +123,7 @@ describe('Invoice', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
-      invoice.markExtracted({ rawText: 'text' });
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
 
       // Act
       const result = invoice.markValidationFailed(['Total is missing']);
@@ -156,7 +157,7 @@ describe('Invoice', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
-      invoice.markExtracted({ rawText: 'text' });
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
 
       // Act
       const result = invoice.markReadyForApproval();
@@ -188,7 +189,7 @@ describe('Invoice', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
-      invoice.markExtracted({ rawText: 'text' });
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
       invoice.markReadyForApproval();
 
       // Act
@@ -221,7 +222,7 @@ describe('Invoice', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
-      invoice.markExtracted({ rawText: 'text' });
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
       invoice.markReadyForApproval();
 
       // Act
@@ -253,7 +254,7 @@ describe('Invoice', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
-      invoice.markExtracted({ rawText: 'text' });
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
       invoice.markValidationFailed(['error']);
 
       // Act

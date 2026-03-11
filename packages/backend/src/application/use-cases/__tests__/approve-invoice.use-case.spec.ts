@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApproveInvoiceUseCase } from '../approve-invoice.use-case';
 import { InvoiceRepository } from '../../../domain/repositories';
 import { AuditPort, NotificationPort } from '../../ports';
-import { createInvoice } from '../../../domain/test/factories';
+import { createInvoice, createExtractedData } from '../../../domain/test/factories';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 
 const INVOICE_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
@@ -11,7 +11,7 @@ const APPROVER_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
 const makeReadyInvoice = () => {
   const invoice = createInvoice({ id: INVOICE_ID });
   invoice.startProcessing()._unsafeUnwrap();
-  invoice.markExtracted({ rawText: 'test' })._unsafeUnwrap();
+  invoice.markExtracted(createExtractedData({ rawText: 'test' }))._unsafeUnwrap();
   invoice.markReadyForApproval()._unsafeUnwrap();
   return invoice;
 };
