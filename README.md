@@ -145,4 +145,163 @@ chore(setup): initialize monorepo with NestJS backend, Docker and base config
 
 ---
 
+### FASE 1 — Domain: entidades, value objects y CI básico
+
+**¿Qué hicimos?**
+
+Construimos el núcleo del negocio: la capa `domain`. Es la parte más importante del proyecto y la que más cambia en Clean Architecture — si aquí está bien, todo lo demás es mecánica.
+
+También migramos Jest (el test runner que NestJS instala por defecto) a Vitest, y creamos el pipeline de CI en GitHub Actions.
+
+---
+
+#### Bloque 1 — Migración de Jest a Vitest
+
+NestJS instala Jest por defecto, pero usamos **Vitest** porque:
+- Es mucho más rápido (usa esbuild internamente)
+- Compatible con el ecosistema Vite que usaremos en el frontend
+- Configuración más simple y moderna
+- Soporte nativo de ESM
+
+Para que Vitest pueda procesar los decoradores de NestJS (`@Injectable()`, `@Controller()`...) instalamos `unplugin-swc` + `@swc/core`. SWC es un compilador de TypeScript/JavaScript escrito en Rust, mucho más rápido que `ts-jest`.
+
+La configuración de cobertura exige:
+- Mínimo **80% de líneas** cubiertas
+- Mínimo **90% de branches** (caminos `if/else`) en el dominio
+
+---
+
+#### Bloque 2 — `neverthrow` y el patrón `Result<T, E>`
+
+Instalamos `neverthrow` como dependencia de producción. Esta librería implementa el tipo `Result<T, E>` que hace los errores **explícitos en la firma de la función**.
+
+Sin `neverthrow`:
+```typescript
+// TypeScript no sabe que puede fallar
+function aprobarFactura(factura: Invoice): Invoice { ... }
+```
+
+Con `neverthrow`:
+```typescript
+// El error es parte del contrato. El compilador obliga a manejarlo.
+function aprobarFactura(factura: Invoice): Result<Invoice, InvalidStateTransitionError> { ... }
+```
+
+Si intentas usar `result.value` sin comprobar antes si es un error, TypeScript no te deja compilar.
+
+---
+
+#### Bloque 3 — Errores de dominio tipados
+
+Creamos una jerarquía de errores propia en `src/domain/errors/`. La base es la clase abstracta `DomainError`:
+
+```typescript
+export abstract class DomainError {
+  abstract readonly code: string;
+  constructor(public readonly message: string) {}
+}
+```
+
+Todos los errores concretos heredan de ella y tienen un `code` único en mayúsculas. Esto permite que el controller mapee errores a códigos HTTP sin depender del texto del mensaje:
+
+| Archivo | Errores |
+|---|---|
+| `invoice.errors.ts` | `InvoiceNotFoundError`, `InvalidStateTransitionError`, `InvoiceAlreadyProcessingError`, `ExtractionFailedError`, `ValidationFailedError` |
+| `provider.errors.ts` | `ProviderNotFoundError`, `ProviderAlreadyExistsError` |
+| `user.errors.ts` | `UserNotFoundError`, `UnauthorizedError` |
+| `value-object.errors.ts` | `InvalidInvoiceAmountError`, `InvalidInvoiceStatusError`, `InvalidInvoiceDateError`, `InvalidTaxIdError`, `InvalidProviderNameError` |
+
+**TDD aplicado:** primero escribimos los tests que fallan (Red), luego el código mínimo para que pasen (Green).
+
+---
+
+#### Bloque 4 — Value Objects
+
+Los Value Objects son objetos del dominio que **no tienen identidad propia** — se definen únicamente por su valor. Son inmutables y se validan al crearse.
+
+Patrón `create()` con constructor privado:
+
+```typescript
+export class InvoiceAmount {
+  private constructor(private readonly value: number) {}
+
+  static create(value: number): Result<InvoiceAmount, InvalidInvoiceAmountError> {
+    if (value <= 0) return err(new InvalidInvoiceAmountError(value));
+    if (!hasMaxTwoDecimals(value)) return err(new InvalidInvoiceAmountError(value));
+    return ok(new InvoiceAmount(value));
+  }
+}
+```
+
+El constructor es `private` — la única forma de crear un `InvoiceAmount` es vía `create()`. Si existe, está validado. Si la validación falla, nunca llega a existir.
+
+| Value Object | Reglas |
+|---|---|
+| `InvoiceAmount` | Mayor que 0, máximo 2 decimales |
+| `InvoiceStatus` | Enum estricto: `PENDING`, `PROCESSING`, `EXTRACTED`, `VALIDATION_FAILED`, `READY_FOR_APPROVAL`, `APPROVED`, `REJECTED` |
+| `InvoiceDate` | No puede ser fecha futura |
+| `TaxId` | Formato NIF (`12345678A`) o CIF (`A1234567`) |
+| `ProviderName` | No vacío, máximo 100 caracteres |
+
+---
+
+#### Bloque 5 — Entities de dominio
+
+Las Entities tienen **identidad propia** — dos `Invoice` con los mismos datos son distintas si tienen distinto `id`. Su igualdad se basa en el identificador.
+
+La entity más importante es `Invoice`, el **aggregate root**. Contiene la máquina de estados completa del workflow:
+
+```
+PENDING → PROCESSING → EXTRACTED → READY_FOR_APPROVAL → APPROVED
+                                 ↘ VALIDATION_FAILED      ↘ REJECTED
+```
+
+Cada transición es un método que devuelve `Result<void, InvalidStateTransitionError>`. Si intentas una transición inválida (aprobar una factura `PENDING`), obtienes un `Err` tipado — nunca una excepción en tiempo de ejecución.
+
+| Entity | Responsabilidad |
+|---|---|
+| `Invoice` | Aggregate root. Contiene la máquina de estados. |
+| `Provider` | Configuración de un proveedor (Telefónica, Amazon...). |
+| `User` | Datos mínimos del usuario en el dominio (id, email, rol). |
+| `AuditEvent` | Registro inmutable de cada acción sensible. |
+| `InvoiceEvent` | Historial de cada transición de estado. |
+
+---
+
+#### Bloque 6 — CI básico con GitHub Actions
+
+Creamos `.github/workflows/ci.yml` que se ejecuta en cada push a `main`/`develop` y en cada Pull Request.
+
+Pasos del pipeline:
+
+| Paso | Qué hace | Por qué |
+|---|---|---|
+| `lint` | ESLint revisa el estilo y calidad del código | Detecta errores comunes y mantiene consistencia |
+| `typecheck` | `tsc --noEmit` verifica los tipos sin compilar | Garantiza que TypeScript está satisfecho |
+| `test` | Vitest ejecuta todos los tests unitarios | Confirma que la lógica funciona |
+| `build` | NestJS compila el proyecto | Garantiza que el código producción es genereable |
+| `secret-scan` | Gitleaks busca secretos accidentalmente commiteados | Seguridad — un JWT secret en Git es un desastre |
+| `audit` | `pnpm audit` busca vulnerabilidades conocidas | Seguridad de dependencias |
+
+Si cualquier paso falla, el CI bloquea el merge. Así nadie puede fusionar código roto a `main`.
+
+---
+
+**Resumen de tests al cerrar FASE 1:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Domain errors | 3 | 12 |
+| Value objects | 5 | 38 |
+| Entities | 5 | 39 |
+| NestJS base | 1 | 1 |
+| **Total** | **14** | **90** |
+
+**Commit de cierre:**
+```
+feat(domain): add value objects, entities, domain errors and basic CI
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*
