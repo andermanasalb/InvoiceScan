@@ -21,6 +21,11 @@ export class InvoiceAmount {
     return ok(new InvoiceAmount(value));
   }
 
+  /** Creates a zero-value placeholder used before OCR extraction. */
+  static createPlaceholder(): InvoiceAmount {
+    return new InvoiceAmount(0);
+  }
+
   getValue(): number {
     return this.value;
   }

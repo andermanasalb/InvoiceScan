@@ -304,4 +304,287 @@ feat(domain): add value objects, entities, domain errors and basic CI
 
 ---
 
+### FASE 2 — Casos de uso, repositorios, puertos, DTOs y factories
+
+**¿Qué hicimos?**
+
+Construimos la capa `application` completa: los casos de uso que orquestan el dominio, las interfaces de repositorios, los puertos para servicios externos, los DTOs con Zod y las factories de test.
+
+Esta fase no toca infraestructura (base de datos, email, almacenamiento) — eso llega en fases futuras. Aquí todo se mockea: los tests comprueban la lógica pura de los casos de uso sin depender de nada externo.
+
+---
+
+#### Bloque 1 — Interfaces de repositorios
+
+Los repositorios son **contratos** que definen cómo se accede a los datos. Viven en `src/domain/repositories/` como interfaces TypeScript puras — sin ninguna implementación.
+
+```typescript
+export interface InvoiceRepository {
+  findById(id: string): Promise<Invoice | null>;
+  findAll(filters: InvoiceFilters): Promise<PaginatedResult<Invoice>>;
+  findByUploaderId(uploaderId: string, filters: InvoiceFilters): Promise<PaginatedResult<Invoice>>;
+  save(invoice: Invoice): Promise<void>;
+  delete(id: string): Promise<void>;
+}
+```
+
+**¿Por qué solo interfaces y no implementaciones?**
+
+Porque los casos de uso no deben saber si los datos vienen de PostgreSQL, de MongoDB o de un archivo en disco. Solo necesitan saber *qué operaciones existen*. La implementación concreta con TypeORM llega en FASE 3.
+
+Esta es la **D** de SOLID (Dependency Inversion): las capas de alto nivel dependen de abstracciones, no de implementaciones concretas.
+
+Repositorios creados:
+
+| Interfaz | Métodos principales |
+|---|---|
+| `InvoiceRepository` | `findById`, `findAll`, `findByUploaderId`, `save`, `delete` |
+| `ProviderRepository` | `findById`, `findByName`, `findAll`, `save` |
+| `UserRepository` | `findById`, `findByEmail`, `findAll`, `save`, `delete` |
+| `AuditEventRepository` | `findById`, `findAll`, `save` |
+
+---
+
+#### Bloque 2 — Puertos de aplicación
+
+Los puertos son interfaces para servicios externos que los casos de uso necesitan pero no implementan. Viven en `src/application/ports/`.
+
+La diferencia con los repositorios es que los repositorios son siempre sobre datos del dominio (facturas, usuarios...), mientras que los puertos son sobre servicios externos genéricos:
+
+| Puerto | Para qué sirve | Implementación futura |
+|---|---|---|
+| `NotificationPort` | Enviar notificaciones de cambio de estado | `NodemailerAdapter` en FASE 11 |
+| `StoragePort` | Guardar y recuperar ficheros PDF | `LocalStorageAdapter` / `S3Adapter` en FASE 4 |
+| `AuditPort` | Registrar eventos de auditoría | Implementación con TypeORM en FASE 3 |
+| `LLMPort` | Llamar a un modelo de lenguaje (Google AI Studio) | `AIStudioAdapter` en FASE 7 |
+
+Ejemplo del `StoragePort`:
+
+```typescript
+export interface StoragePort {
+  save(buffer: Buffer, mimeType: string): Promise<StoredFile>;
+  get(key: string): Promise<Buffer>;
+  delete(key: string): Promise<void>;
+  getSignedUrl(key: string, expiresInSeconds?: number): Promise<string>;
+}
+```
+
+El caso de uso llama a `this.storage.save(buffer, mimeType)` sin saber si el archivo se guarda en disco local o en AWS S3. Si en el futuro se cambia de almacenamiento, solo se cambia el adaptador — el caso de uso no se toca.
+
+---
+
+#### Bloque 3 — Factories de test
+
+Las factories son funciones que crean objetos de dominio válidos con datos por defecto, permitiendo sobrescribir solo lo que cada test necesita.
+
+**¿Por qué son necesarias?**
+
+Sin factories, cada test construye el objeto manualmente:
+
+```typescript
+// Sin factory — repetitivo y frágil
+const invoice = Invoice.create({
+  id: 'inv-123',
+  providerId: 'provider-abc',
+  uploaderId: 'user-xyz',
+  filePath: 'uploads/test.pdf',
+  amount: InvoiceAmount.create(100)._unsafeUnwrap(),
+  date: InvoiceDate.create(new Date('2025-01-15'))._unsafeUnwrap(),
+  createdAt: new Date('2025-01-15'),
+})._unsafeUnwrap();
+```
+
+Si el constructor de `Invoice` cambia, hay que actualizar cada test que construya una factura. Con factory:
+
+```typescript
+// Con factory — conciso y mantenible
+const invoice = createInvoice();                          // valores por defecto
+const invoice = createInvoice({ uploaderId: 'user-1' }); // solo lo que importa al test
+```
+
+**Factories vs mocks — ¿cuál es la diferencia?**
+
+Son conceptos distintos que se usan juntos:
+
+- Una **factory** crea un **objeto de dominio real** con estado real y métodos reales. Puedes llamar `invoice.approve()` y funciona de verdad.
+- Un **mock** simula una **dependencia externa** (un repositorio, un puerto) controlando su comportamiento artificialmente.
+
+```typescript
+it('should approve an invoice', async () => {
+  // Factory: crea datos reales
+  const invoice = createInvoice();
+  invoice.startProcessing()._unsafeUnwrap();
+  invoice.markExtracted({ rawText: '...' })._unsafeUnwrap();
+  invoice.markReadyForApproval()._unsafeUnwrap();
+
+  // Mock: simula el repositorio (infraestructura)
+  const mockRepo = {
+    findById: vi.fn().mockResolvedValue(invoice), // devuelve el objeto real de la factory
+    save: vi.fn(),
+  };
+
+  const useCase = new ApproveInvoiceUseCase(mockRepo, ...);
+  const result = await useCase.execute({ invoiceId: invoice.getId(), approverId: 'user-1' });
+
+  expect(result.isOk()).toBe(true);
+});
+```
+
+**Diseño de los valores por defecto:**
+
+- El `id` usa `randomUUID()` en cada llamada — así nunca hay colisiones entre objetos creados en el mismo test.
+- El resto de campos son fijos y predecibles — así los tests pueden hacer assertions sobre valores concretos.
+
+Factories creadas: `createInvoice`, `createProvider`, `createUser`, `createAuditEvent`, `createInvoiceEvent`.
+
+---
+
+#### Bloque 4 — DTOs con Zod
+
+Los DTOs (*Data Transfer Objects*) definen qué datos entran y salen de cada caso de uso. Con Zod, un único schema hace dos cosas a la vez: valida los datos en tiempo de ejecución **y** define el tipo TypeScript.
+
+**¿Por qué Zod y no solo TypeScript?**
+
+TypeScript solo existe en compilación. Cuando compilas, `tsc` convierte todo el TypeScript a JavaScript eliminando completamente los tipos. El servidor ejecuta ese JavaScript puro, que no tiene ningún concepto de tipos.
+
+```
+Tú escribes TypeScript → tsc compila → Node.js ejecuta JavaScript (sin tipos)
+```
+
+Esto significa que cuando llega una petición HTTP, el body es JavaScript puro — podría ser cualquier cosa. TypeScript no puede protegerte de datos externos malformados en runtime:
+
+```typescript
+// TypeScript cree que esto es correcto en compilación...
+async function aprobarFactura(input: { invoiceId: string }) { ... }
+
+// ...pero en runtime el body puede ser: { invoiceId: "" } o { invoiceId: 99999 } o {}
+// TypeScript ya no existe para detectarlo
+```
+
+Zod valida **en runtime**, dentro del JavaScript que se está ejecutando:
+
+```typescript
+const schema = z.object({
+  invoiceId: z.string().uuid(),
+});
+
+const result = schema.safeParse(req.body);
+if (!result.success) {
+  // Zod detectó en runtime que invoiceId no es un UUID válido
+  return res.status(400).json({ error: result.error });
+}
+// Aquí sí puedes confiar en los datos
+```
+
+**Resumen:** TypeScript te protege de *tus propios errores* al escribir código. Zod te protege del *mundo exterior* en tiempo de ejecución.
+
+Cada DTO tiene un schema de entrada (lo que recibe el use case) y uno de salida (lo que devuelve):
+
+| DTO | Input | Output |
+|---|---|---|
+| `upload-invoice` | `uploaderId`, `providerId`, `fileBuffer`, `mimeType`, `fileSizeBytes` | `invoiceId`, `status`, `filePath`, `createdAt` |
+| `approve-invoice` | `invoiceId`, `approverId` (UUIDs) | `invoiceId`, `status`, `approverId` |
+| `reject-invoice` | `invoiceId`, `approverId`, `reason` (no vacío) | `invoiceId`, `status`, `approverId`, `reason` |
+| `get-invoice` | `invoiceId`, `requesterId`, `requesterRole` | Todos los campos de la factura |
+| `list-invoices` | `requesterId`, `requesterRole`, paginación, filtros | `items[]`, `total`, `page`, `limit` |
+| `create-provider` | `name`, `adapterType` (enum) | `providerId`, `name`, `adapterType`, `createdAt` |
+| `create-user` | `email`, `role`, `password` (mín. 8 chars) | `userId`, `email`, `role`, `createdAt` |
+
+---
+
+#### Bloque 5 — Casos de uso con TDD
+
+Los casos de uso son la capa que orquesta el dominio para cumplir una acción concreta. Cada uno hace exactamente una cosa.
+
+Flujo de un caso de uso típico:
+
+```
+1. Recibir el DTO de entrada
+2. Buscar los datos necesarios (vía repositorio mockeado)
+3. Ejecutar la lógica de dominio (entity, value object)
+4. Persistir los cambios (vía repositorio)
+5. Efectos secundarios (auditoría, notificación)
+6. Devolver Result<Output, DomainError>
+```
+
+**TDD aplicado:** para cada use case se escribe primero el test (rojo), luego la implementación mínima (verde), luego se refactoriza.
+
+Casos de uso implementados:
+
+**`UploadInvoiceUseCase`** — Guarda el PDF en `StoragePort`, crea la `Invoice` en estado `PENDING`, la persiste y registra la auditoría. El importe se inicializa con `InvoiceAmount.createPlaceholder()` porque aún no hay OCR — se actualizará en FASE 5.
+
+**`ApproveInvoiceUseCase`** — Busca la factura, delega la validación de la transición al dominio (`invoice.approve()`), persiste, audita y notifica. Si la factura no está en `READY_FOR_APPROVAL`, el dominio devuelve `Err` y el use case lo propaga.
+
+**`RejectInvoiceUseCase`** — Igual que approve pero con razón de rechazo obligatoria.
+
+**`GetInvoiceUseCase`** — Aplica RBAC (control de acceso por roles): un `uploader` solo puede ver sus propias facturas. `validator`, `approver` y `admin` pueden ver cualquiera. Si un uploader intenta acceder a una factura ajena, devuelve `UnauthorizedError`.
+
+**`ListInvoicesUseCase`** — Usa `findByUploaderId` para uploaders (solo ven las suyas) y `findAll` para el resto. Soporta paginación y filtros.
+
+**`CreateProviderUseCase`** — Comprueba que el nombre no esté ya en uso antes de crear.
+
+**`CreateUserUseCase`** — Comprueba que el email no esté ya en uso antes de crear.
+
+---
+
+#### Problemas encontrados y cómo se resolvieron
+
+**1. Zod no instalado en el backend**
+
+Al crear los DTOs, TypeScript no encontraba el módulo `zod`. El motivo: en un monorepo con pnpm workspaces, cada paquete debe declarar sus dependencias explícitamente en su propio `package.json`. No hereda las dependencias de otros paquetes automáticamente.
+
+Solución: `pnpm --filter backend add zod`.
+
+**2. `InvoiceAmount.create(0)` falla — amount 0 no es válido**
+
+Para el upload inicial, antes del OCR, no sabemos el importe real. Se intentó usar `InvoiceAmount.create(0)` como valor provisional, pero la regla de negocio del value object rechaza `value <= 0` (ninguna factura real tiene importe cero).
+
+La solución incorrecta habría sido relajar la regla de negocio para admitir 0 — eso corrompería una invariante del dominio.
+
+La solución correcta: añadir `InvoiceAmount.createPlaceholder()`, un método estático separado con nombre explícito que comunica la intención — *"este importe es provisional, se actualizará tras OCR"*. La regla de negocio principal queda intacta.
+
+**3. TypeScript rechaza `Set.has()` con tipos más amplios**
+
+Se usó un `Set` para los roles con acceso total. TypeScript infiere el tipo del Set como `Set<'validator' | 'approver' | 'admin'>`, y el método `.has()` solo acepta exactamente esos tres valores.
+
+Pero `input.requesterRole` puede ser cualquier `UserRoleValue` — incluyendo `'uploader'`. TypeScript rechaza pasarlo a `.has()` porque `'uploader'` no está en el tipo del Set.
+
+Importante: esto **no es un error de runtime**. En JavaScript, `set.has('uploader')` simplemente devuelve `false`. El problema es solo en compilación — TypeScript es demasiado estricto en este caso concreto.
+
+El cast no funcionó porque no cambia el tipo del Set, solo el del argumento.
+
+Solución: usar `string[]` con `.includes()`, que acepta cualquier `string` sin restricciones. El comportamiento en runtime es idéntico.
+
+```typescript
+// ❌ TypeScript rechaza esto en compilación
+const ROLES = new Set(['validator', 'approver', 'admin']);
+ROLES.has(input.requesterRole); // Error: 'uploader' no asignable
+
+// ✅ TypeScript acepta esto
+const ROLES: string[] = ['validator', 'approver', 'admin'];
+ROLES.includes(input.requesterRole); // OK
+```
+
+La lección: **TypeScript en compilación puede ser más estricto que JavaScript en runtime. A veces hay que buscar alternativas que satisfagan al compilador sin cambiar la lógica.**
+
+---
+
+**Resumen de tests al cerrar FASE 2:**
+
+| Categoría | Archivos de test | Tests |
+|---|---|---|
+| Domain errors | 3 | 12 |
+| Value objects | 5 | 38 |
+| Entities | 5 | 39 |
+| Use cases | 7 | 30 |
+| NestJS base | 1 | 1 |
+| **Total** | **21** | **120** |
+
+**Commit de cierre:**
+```
+feat(application): add use cases, repositories, ports, DTOs and test factories
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*

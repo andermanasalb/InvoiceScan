@@ -42,3 +42,14 @@ export class ValidationFailedError extends DomainError {
     super(`Validation failed: ${errors.join(', ')}`);
   }
 }
+
+export class InvalidFieldError extends DomainError {
+  readonly code = 'INVALID_FIELD';
+
+  constructor(
+    public readonly field: string,
+    reason: string,
+  ) {
+    super(`Invalid field '${field}': ${reason}`);
+  }
+}
