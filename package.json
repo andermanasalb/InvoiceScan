@@ -1,0 +1,11 @@
+{
+  "name": "invoice-flow",
+  "private": true,
+  "scripts": {
+    "dev:backend": "pnpm --filter backend start:dev",
+    "build": "pnpm --filter '*' build",
+    "lint": "pnpm --filter '*' lint",
+    "typecheck": "pnpm --filter '*' typecheck",
+    "test": "pnpm --filter '*' test"
+  }
+}
