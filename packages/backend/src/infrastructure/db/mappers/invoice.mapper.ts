@@ -25,6 +25,20 @@ export class InvoiceMapper {
       orm.status as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
     )._unsafeUnwrap();
 
+    const raw = orm.extractedData as Record<string, unknown> | null;
+    const extractedData: ExtractedData | null = raw
+      ? {
+          rawText: (raw['rawText'] as string) ?? '',
+          total: (raw['total'] as number | null) ?? null,
+          fecha: (raw['fecha'] as string | null) ?? null,
+          numeroFactura: (raw['numeroFactura'] as string | null) ?? null,
+          nifEmisor: (raw['nifEmisor'] as string | null) ?? null,
+          nombreEmisor: (raw['nombreEmisor'] as string | null) ?? null,
+          baseImponible: (raw['baseImponible'] as number | null) ?? null,
+          iva: (raw['iva'] as number | null) ?? null,
+        }
+      : null;
+
     return Invoice.reconstruct({
       id: orm.id,
       providerId: orm.providerId,
@@ -34,7 +48,7 @@ export class InvoiceMapper {
       date,
       createdAt: orm.createdAt,
       status,
-      extractedData: orm.extractedData as ExtractedData | null,
+      extractedData,
       validationErrors: orm.validationErrors ?? [],
       approverId: orm.approverId,
       rejectionReason: orm.rejectionReason,

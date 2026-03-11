@@ -10,7 +10,13 @@ import { DomainError } from '../errors/domain.error';
 
 export interface ExtractedData {
   rawText: string;
-  [key: string]: unknown;
+  total: number | null;
+  fecha: string | null;
+  numeroFactura: string | null;
+  nifEmisor: string | null;
+  nombreEmisor: string | null;
+  baseImponible: number | null;
+  iva: number | null;
 }
 
 export interface CreateInvoiceProps {

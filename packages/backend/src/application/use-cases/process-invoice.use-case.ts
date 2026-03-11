@@ -1,9 +1,9 @@
 import { ok, err, Result } from 'neverthrow';
 import { InvoiceRepository } from '../../domain/repositories';
-import { StoragePort, AuditPort, OcrPort } from '../ports';
+import { StoragePort, AuditPort, OcrPort, LLMPort } from '../ports';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError } from '../../domain/errors';
-import { Invoice } from '../../domain/entities';
+import { ExtractedData } from '../../domain/entities/invoice.entity';
 
 export interface ProcessInvoiceInput {
   invoiceId: string;
@@ -12,7 +12,7 @@ export interface ProcessInvoiceInput {
 export interface ProcessInvoiceOutput {
   invoiceId: string;
   status: string;
-  extractedData: { rawText: string } | null;
+  extractedData: ExtractedData | null;
 }
 
 export class ProcessInvoiceUseCase {
@@ -21,6 +21,7 @@ export class ProcessInvoiceUseCase {
     private readonly storage: StoragePort,
     private readonly ocr: OcrPort,
     private readonly auditor: AuditPort,
+    private readonly llm: LLMPort,
   ) {}
 
   async execute(
@@ -40,30 +41,66 @@ export class ProcessInvoiceUseCase {
     // 4. OCR
     const ocrResult = await this.ocr.extractText(buffer);
 
-    if (ocrResult.isOk()) {
-      // 5a. PROCESSING → EXTRACTED
-      invoice.markExtracted({ rawText: ocrResult.value.text })._unsafeUnwrap();
-    } else {
-      // 5b. PROCESSING → VALIDATION_FAILED
+    if (ocrResult.isErr()) {
+      // OCR falló → VALIDATION_FAILED
       invoice.markValidationFailed([ocrResult.error.message])._unsafeUnwrap();
+      await this.invoiceRepo.save(invoice);
+      await this.auditor.record({
+        action: 'process',
+        resourceId: invoice.getId(),
+        userId: invoice.getUploaderId(),
+      });
+      return ok({
+        invoiceId: invoice.getId(),
+        status: invoice.getStatus().getValue(),
+        extractedData: null,
+      });
     }
 
-    // 6. Persistir
+    // 5. LLM extraction
+    const rawText = ocrResult.value.text;
+    const llmResult = await this.llm.extractInvoiceData(rawText);
+
+    if (llmResult.isErr()) {
+      // LLM falló → VALIDATION_FAILED
+      invoice.markValidationFailed([llmResult.error.message])._unsafeUnwrap();
+      await this.invoiceRepo.save(invoice);
+      await this.auditor.record({
+        action: 'process',
+        resourceId: invoice.getId(),
+        userId: invoice.getUploaderId(),
+      });
+      return ok({
+        invoiceId: invoice.getId(),
+        status: invoice.getStatus().getValue(),
+        extractedData: null,
+      });
+    }
+
+    // 6. PROCESSING → EXTRACTED (con todos los campos)
+    const extractedData: ExtractedData = {
+      rawText,
+      ...llmResult.value,
+    };
+    invoice.markExtracted(extractedData)._unsafeUnwrap();
+
+    // 7. EXTRACTED → READY_FOR_APPROVAL
+    invoice.markReadyForApproval()._unsafeUnwrap();
+
+    // 8. Persistir
     await this.invoiceRepo.save(invoice);
 
-    // 7. Audit
+    // 9. Audit
     await this.auditor.record({
       action: 'process',
       resourceId: invoice.getId(),
       userId: invoice.getUploaderId(),
     });
 
-    const extractedData = invoice.getExtractedData();
-
     return ok({
       invoiceId: invoice.getId(),
       status: invoice.getStatus().getValue(),
-      extractedData: extractedData ? { rawText: extractedData.rawText as string } : null,
+      extractedData: invoice.getExtractedData(),
     });
   }
 }

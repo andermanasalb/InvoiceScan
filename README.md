@@ -1183,4 +1183,176 @@ feat(ocr+queue): add Tesseract OCR, ProcessInvoiceUseCase and BullMQ worker
 
 ---
 
+### FASE 7 — Extracción LLM con Google AI Studio
+
+**¿Qué hicimos?**
+
+Completamos el flujo de extracción de datos de facturas integrando un modelo de lenguaje (LLM) como segunda etapa tras el OCR. El texto crudo que devuelve Tesseract se envía a Google AI Studio (Gemini), que extrae 7 campos estructurados. Si ambas etapas tienen éxito, la factura pasa a `READY_FOR_APPROVAL` automáticamente.
+
+---
+
+#### Bloque 1 — `LLMError` y `LLMPort`
+
+**`LLMError`** es el error de dominio para fallos del LLM. Hereda de `DomainError` con `code: 'LLM_ERROR'`. Vive en `src/domain/errors/llm.errors.ts` y se exporta desde `src/domain/errors/index.ts`.
+
+**`LLMPort`** es la interfaz del puerto LLM en `src/application/ports/llm.port.ts`. Define el contrato que cualquier adaptador LLM debe cumplir:
+
+```typescript
+export interface LLMExtractionResult {
+  total: number | null;
+  fecha: string | null;         // formato 'YYYY-MM-DD'
+  numeroFactura: string | null;
+  nifEmisor: string | null;
+  nombreEmisor: string | null;
+  baseImponible: number | null;
+  iva: number | null;
+}
+
+export interface LLMPort {
+  extractInvoiceData(ocrText: string): Promise<Result<LLMExtractionResult, LLMError>>;
+}
+
+export const LLM_TOKEN = 'LLMPort';
+```
+
+Todos los campos son `null`able — el LLM puede no encontrar alguno en una factura concreta. Devuelve `Result<LLMExtractionResult, LLMError>`, nunca lanza excepciones.
+
+---
+
+#### Bloque 2 — `AIStudioAdapter`
+
+`AIStudioAdapter` implementa `LLMPort` usando `@google/generative-ai` (el SDK oficial de Google). Vive en `src/infrastructure/llm/ai-studio.adapter.ts`.
+
+**Flujo interno:**
+
+```
+ocrText → buildPrompt(ocrText) → Gemini API → rawText (JSON string)
+         → JSON.parse() → ExtractionSchema.safeParse() → LLMExtractionResult
+```
+
+**Prompt en español:** el adaptador construye un prompt que instruye al modelo a devolver exactamente un JSON con los 7 campos, usando `null` cuando no encuentre un campo. El prompt indica reglas de formato: `fecha` en ISO `YYYY-MM-DD`, `total` y `baseImponible` como números decimales, `iva` como porcentaje numérico.
+
+**Validación con Zod:** la respuesta del modelo se valida con `ExtractionSchema`. Esto garantiza que el JSON que devuelve el LLM tiene la forma exacta esperada antes de devolverlo como `LLMExtractionResult`. Si el LLM devuelve campos como strings en lugar de números, Zod los coerciona automáticamente.
+
+**Fast-fail sin API key:** si `AISTUDIO_API_KEY` está vacía, el adaptador devuelve `Err(LLMError)` inmediatamente sin hacer ninguna llamada de red. La app arranca sin la key (es opcional en el schema de configuración), pero el procesamiento de facturas fallará hasta que se configure.
+
+```typescript
+if (!this.apiKey) {
+  return err(new LLMError('AISTUDIO_API_KEY no está configurada...'));
+}
+```
+
+**Modelo configurable:** el modelo concreto (`gemini-1.5-flash` por defecto) se pasa como parámetro del constructor y se lee de la variable de entorno `AISTUDIO_MODEL`. Cambiarlo no requiere modificar código.
+
+---
+
+#### Bloque 3 — `ExtractedData` y `ProcessInvoiceUseCase`
+
+**`ExtractedData` actualizado** en `src/domain/entities/invoice.entity.ts`:
+
+```typescript
+export interface ExtractedData {
+  rawText: string;
+  total: number | null;
+  fecha: string | null;
+  numeroFactura: string | null;
+  nifEmisor: string | null;
+  nombreEmisor: string | null;
+  baseImponible: number | null;
+  iva: number | null;
+}
+```
+
+Reemplaza el genérico `[key: string]: unknown` por los 7 campos explícitos. Ahora TypeScript conoce exactamente qué campos hay en los datos extraídos.
+
+**`ProcessInvoiceUseCase` extendido** con `LLMPort` como 5º parámetro. El nuevo flujo completo:
+
+```
+1. Busca la factura por ID
+2. PENDING → PROCESSING
+3. Recupera el PDF del storage
+4. OCR (OcrPort) — si falla → VALIDATION_FAILED, fin
+5. LLM extraction (LLMPort) — si falla → VALIDATION_FAILED, fin
+6. PROCESSING → EXTRACTED (con rawText + 7 campos LLM)
+7. EXTRACTED → READY_FOR_APPROVAL
+8. Persiste
+9. Registra auditoría
+```
+
+Si OCR falla, el LLM no se llama. Si LLM falla, la factura queda en `VALIDATION_FAILED` con el mensaje de error del LLM.
+
+---
+
+#### Bloque 4 — `InvoiceMapper` actualizado
+
+El mapper en `src/infrastructure/db/mappers/invoice.mapper.ts` lee el JSONB de PostgreSQL campo a campo con tipos explícitos:
+
+```typescript
+const raw = orm.extractedData as Record<string, unknown> | null;
+const extractedData: ExtractedData | null = raw
+  ? {
+      rawText: (raw['rawText'] as string) ?? '',
+      total: (raw['total'] as number | null) ?? null,
+      // ...los 7 campos
+    }
+  : null;
+```
+
+No hay migración nueva — los 7 campos LLM van dentro del campo `extracted_data` de tipo JSONB que ya existía en la tabla `invoices`. JSONB puede almacenar cualquier estructura JSON, por lo que añadir campos no requiere cambiar el schema de la base de datos.
+
+---
+
+#### Bloque 5 — Wiring en `JobsModule`
+
+`AIStudioAdapter` se inyecta en `jobs.module.ts` bajo `LLM_TOKEN`. Lee la API key y el modelo desde `ConfigService` (que a su vez los lee del `.env` validado por Zod):
+
+```typescript
+{
+  provide: LLM_TOKEN,
+  useFactory: (config: ConfigService) => {
+    const apiKey = config.get<string>('AISTUDIO_API_KEY') ?? '';
+    const model = config.get<string>('AISTUDIO_MODEL') ?? 'gemini-1.5-flash';
+    return new AIStudioAdapter(apiKey, model);
+  },
+  inject: [ConfigService],
+},
+```
+
+`ProcessInvoiceUseCase` se construye ahora con 5 parámetros:
+
+```typescript
+useFactory: (invoiceRepo, storage, ocr, auditor, llm) =>
+  new ProcessInvoiceUseCase(invoiceRepo, storage, ocr, auditor, llm),
+inject: ['InvoiceRepository', STORAGE_TOKEN, OCR_TOKEN, AUDIT_TOKEN, LLM_TOKEN],
+```
+
+**Para usar la extracción LLM real,** añade al `.env`:
+
+```
+AISTUDIO_API_KEY=tu-api-key-de-google-ai-studio
+AISTUDIO_MODEL=gemini-1.5-flash
+```
+
+Sin la key, el sistema sigue funcionando pero las facturas quedarán en `VALIDATION_FAILED` con mensaje explicativo.
+
+---
+
+**Resumen de tests al cerrar FASE 7:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 22 | 131 |
+| Unit (storage + pipe + controller) | 3 | 24 |
+| Unit (OCR + LLM + queue + worker) | 4 | 19 |
+| Integration (repositorios reales) | 4 | 36 |
+| NestJS base | 1 | 1 |
+| **Total** | **34** | **211** |
+
+**Commit de cierre:**
+```
+feat(llm): add AIStudioAdapter, LLM extraction in ProcessInvoiceUseCase
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*
