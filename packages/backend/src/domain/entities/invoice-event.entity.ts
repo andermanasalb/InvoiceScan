@@ -49,6 +49,21 @@ export class InvoiceEvent {
     );
   }
 
+  /**
+   * Reconstructs an InvoiceEvent from persisted data (e.g. from the database).
+   * Skips validation — data is assumed to be already valid.
+   */
+  static reconstruct(props: CreateInvoiceEventProps): InvoiceEvent {
+    return new InvoiceEvent(
+      props.id,
+      props.invoiceId,
+      props.from,
+      props.to,
+      props.userId,
+      props.timestamp,
+    );
+  }
+
   getId(): string {
     return this.id;
   }

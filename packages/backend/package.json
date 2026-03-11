@@ -17,15 +17,23 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
-    "test:e2e": "vitest run --config ./test/vitest-e2e.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "test:e2e": "vitest run --config ./test/vitest-e2e.config.ts",
+    "migration:run": "typeorm-ts-node-commonjs migration:run -d data-source.ts",
+    "migration:revert": "typeorm-ts-node-commonjs migration:revert -d data-source.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate -d data-source.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/typeorm": "^11.0.0",
+    "dotenv": "^17.3.1",
     "neverthrow": "^8.2.0",
+    "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "typeorm": "^0.3.28",
     "zod": "^4.3.6"
   },
   "devDependencies": {
@@ -38,6 +46,7 @@
     "@swc/helpers": "^0.5.19",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.7",
+    "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.18.0",

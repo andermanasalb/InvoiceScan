@@ -61,6 +61,42 @@ export class Invoice {
     );
   }
 
+  /**
+   * Reconstructs an Invoice from persisted data (e.g. from the database).
+   * Skips validation — data is assumed to be already valid since it was
+   * validated by create() before being saved.
+   */
+  static reconstruct(props: {
+    id: string;
+    providerId: string;
+    uploaderId: string;
+    filePath: string;
+    amount: InvoiceAmount;
+    date: InvoiceDate;
+    createdAt: Date;
+    status: InvoiceStatus;
+    extractedData: ExtractedData | null;
+    validationErrors: string[];
+    approverId: string | null;
+    rejectionReason: string | null;
+  }): Invoice {
+    const invoice = new Invoice(
+      props.id,
+      props.providerId,
+      props.uploaderId,
+      props.filePath,
+      props.amount,
+      props.date,
+      props.createdAt,
+    );
+    invoice.status = props.status;
+    invoice.extractedData = props.extractedData;
+    invoice.validationErrors = props.validationErrors;
+    invoice.approverId = props.approverId;
+    invoice.rejectionReason = props.rejectionReason;
+    return invoice;
+  }
+
   // --- State machine transitions ---
 
   startProcessing(): Result<void, InvalidStateTransitionError> {

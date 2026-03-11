@@ -43,6 +43,21 @@ export class AuditEvent {
     );
   }
 
+  /**
+   * Reconstructs an AuditEvent from persisted data (e.g. from the database).
+   * Skips validation — data is assumed to be already valid.
+   */
+  static reconstruct(props: CreateAuditEventProps): AuditEvent {
+    return new AuditEvent(
+      props.id,
+      props.userId,
+      props.action,
+      props.resourceId,
+      props.ip,
+      props.timestamp,
+    );
+  }
+
   getId(): string {
     return this.id;
   }

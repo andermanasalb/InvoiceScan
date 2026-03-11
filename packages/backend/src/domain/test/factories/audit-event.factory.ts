@@ -2,10 +2,10 @@ import { randomUUID } from 'crypto';
 import { AuditEvent, CreateAuditEventProps } from '../../entities/audit-event.entity';
 
 const defaultProps = (): CreateAuditEventProps => ({
-  id: 'audit-' + randomUUID(),
-  userId: 'user-456',
+  id: randomUUID(),
+  userId: randomUUID(),
   action: 'upload',
-  resourceId: 'inv-123',
+  resourceId: randomUUID(),
   ip: '127.0.0.1',
   timestamp: new Date('2025-01-15'),
 });

@@ -587,4 +587,209 @@ feat(application): add use cases, repositories, ports, DTOs and test factories
 
 ---
 
+### FASE 3 — Base de datos: migraciones, ORM entities, mappers y repositorios reales
+
+**¿Qué hicimos?**
+
+Implementamos la capa de infraestructura de datos completa: la conexión real a PostgreSQL via TypeORM, las tablas de la base de datos creadas mediante migraciones versionadas, las clases ORM que mapean entre tablas y código, los mappers que traducen entre el mundo ORM y el mundo del dominio, y los repositorios concretos que implementan las interfaces definidas en FASE 2.
+
+Al cerrar esta fase, el backend puede persistir y recuperar todos los objetos del dominio en una base de datos PostgreSQL real.
+
+---
+
+#### Bloque 1 — Configuración de entorno y módulo de base de datos
+
+**`config.schema.ts` — Validación de variables de entorno con Zod**
+
+Creamos un schema Zod que valida todas las variables de entorno al arrancar la aplicación. Si falta alguna variable requerida o tiene un formato incorrecto, la app falla inmediatamente con un mensaje claro.
+
+**¿Por qué validar en el arranque?**
+
+Sin validación, un error de configuración se manifestaría en tiempo de ejecución, quizá horas después o en una ruta poco frecuente. Con Zod al inicio, falla rápido y con mensaje claro:
+
+```
+❌ Sin validación: "SASL: client password must be a string" (oscuro)
+✅ Con Zod: "DATABASE_URL: Invalid url" (claro)
+```
+
+**`database.module.ts`**
+
+El módulo de NestJS que configura TypeORM. Lee la `DATABASE_URL` del entorno validado y configura la conexión con:
+- `synchronize: false` — nunca alterar el schema automáticamente en producción
+- `migrationsRun: false` — las migraciones se ejecutan a mano, no al arrancar
+- `logging: false` — sin SQL verboso en producción (configurable)
+
+**`data-source.ts`**
+
+Archivo independiente del framework NestJS, necesario para que el CLI de TypeORM pueda ejecutar migraciones sin arrancar toda la aplicación. Carga el `.env` desde la raíz del monorepo con una ruta explícita.
+
+---
+
+#### Bloque 2 — ORM Entities
+
+Las ORM Entities son clases TypeScript decoradas con `@Entity()`, `@Column()`, etc., que TypeORM usa para mapear cada clase a una tabla de base de datos. Son **pura infraestructura** — no contienen lógica de negocio.
+
+**¿Por qué no usar las entities de dominio directamente con TypeORM?**
+
+Las entities de dominio tienen constructores privados, métodos de negocio (`invoice.approve()`) y el patrón `Result<T,E>`. Si se decorasen con `@Entity()` de TypeORM, se violaría la regla de dependencias: el dominio importaría TypeORM (infraestructura).
+
+Solución: dos clases separadas conectadas por un mapper.
+
+| ORM Entity | Tabla | Notas |
+|---|---|---|
+| `UserOrmEntity` | `users` | id UUID, email unique, role, timestamps |
+| `UserCredentialOrmEntity` | `user_credentials` | password hash, FK a users |
+| `ProviderOrmEntity` | `providers` | name unique, adapterType, isActive |
+| `InvoiceOrmEntity` | `invoices` | status, amount (numeric), FK a user y provider |
+| `InvoiceEventOrmEntity` | `invoice_events` | historial de transiciones, inmutable |
+| `AuditEventOrmEntity` | `audit_events` | registro de acciones, inmutable |
+
+---
+
+#### Bloque 3 — Método `reconstruct()` y Mappers
+
+**`reconstruct()` en las entities de dominio**
+
+Para que los mappers puedan crear entities de dominio desde datos de base de datos (que ya están validados), añadimos el método estático `reconstruct()` a todas las entities. A diferencia de `create()` (que valida con `Result`), `reconstruct()` confía en que los datos son correctos — ya fueron validados cuando se guardaron. Permite construir sin el overhead del `Result<T,E>`.
+
+```typescript
+// create() — para datos externos no confiables
+static create(props): Result<Invoice, DomainError> { ... }
+
+// reconstruct() — para datos ya validados de la DB
+static reconstruct(props): Invoice { ... }
+```
+
+**Mappers**
+
+Los mappers traducen en ambas direcciones entre el mundo ORM y el mundo del dominio:
+
+```
+ORM Entity  ──toDomain()──→  Domain Entity
+Domain Entity ──toOrm()────→  ORM Entity
+```
+
+Un mapper por entidad: `UserMapper`, `ProviderMapper`, `InvoiceMapper`, `InvoiceEventMapper`, `AuditEventMapper`.
+
+---
+
+#### Bloque 4 — Migraciones
+
+Las migraciones son la forma correcta de gestionar el schema de la base de datos en producción. Cada migración es un archivo TypeScript con dos métodos:
+
+- `up()` — aplica el cambio (crear tabla, añadir columna...)
+- `down()` — revierte el cambio (para poder hacer rollback)
+
+```
+pnpm --filter backend migration:run   ← aplica migraciones pendientes
+pnpm --filter backend migration:revert ← revierte la última migración
+```
+
+**Naming convention:** `YYYYMMDDHHMMSS_DescripcionCorta.ts` — el timestamp garantiza el orden de ejecución.
+
+Migraciones creadas y ejecutadas exitosamente:
+
+| Migración | Tabla | Descripción |
+|---|---|---|
+| `1741650001000-CreateUsersTable` | `users` | Tabla base de usuarios |
+| `1741650002000-CreateUserCredentialsTable` | `user_credentials` | Credenciales separadas por seguridad |
+| `1741650003000-CreateProvidersTable` | `providers` | Proveedores de facturas |
+| `1741650004000-CreateInvoicesTable` | `invoices` | Facturas con FK a usuarios y proveedores |
+| `1741650005000-CreateInvoiceEventsTable` | `invoice_events` | Historial de transiciones de estado |
+| `1741650006000-CreateAuditEventsTable` | `audit_events` | Log de auditoría inmutable |
+
+**¿Por qué las credenciales están en tabla separada?**
+
+Por el principio de responsabilidad única y seguridad. Si en el futuro se añade OAuth o SSO, los usuarios pueden existir sin credenciales propias. Además, limita la superficie de ataque: una query de usuarios no expone accidentalmente hashes de contraseñas.
+
+**Problema encontrado: conflicto de puerto PostgreSQL**
+
+Hay una instalación local de PostgreSQL en Windows que ocupa el puerto `5432`. Docker no puede usar ese puerto. Solución: cambiar el puerto del contenedor a `5433:5432` en `docker-compose.yml` y actualizar `DATABASE_URL` a `postgresql://...@localhost:5433/invoicescan`.
+
+---
+
+#### Bloque 5 — Implementaciones de repositorios con TypeORM
+
+Implementamos las 4 interfaces de repositorio definidas en FASE 2, ahora con TypeORM real:
+
+- `UserTypeOrmRepository` — implementa `UserRepository`
+- `ProviderTypeOrmRepository` — implementa `ProviderRepository`
+- `InvoiceTypeOrmRepository` — implementa `InvoiceRepository`
+- `AuditEventTypeOrmRepository` — implementa `AuditEventRepository`
+
+Cada repositorio:
+1. Recibe el `Repository<OrmEntity>` de TypeORM por inyección de dependencias
+2. Usa el mapper correspondiente para convertir entre ORM y dominio
+3. Implementa los filtros explícitamente (`WHERE user_id = :uploaderId`) — nunca RLS de PostgreSQL
+4. Devuelve entidades de dominio, nunca ORM entities
+
+---
+
+#### Bloque 6 — Tests de integración contra PostgreSQL real
+
+Los tests de integración verifican que los repositorios funcionan correctamente contra una base de datos real. No son mocks — hablan con el PostgreSQL de Docker.
+
+**Infraestructura de test:**
+
+`db-test.helper.ts` proporciona dos funciones:
+- `createTestDataSource()` — crea y conecta un DataSource TypeORM para tests
+- `clearTables(ds)` — borra todas las filas en el orden correcto (respetando FK constraints) antes de cada test
+
+**¿Por qué borrar antes de cada test y no solo una vez?**
+
+Porque cada test debe ser independiente: si un test inserta datos y falla a medias, el siguiente no debe encontrar esos datos. Cada `it()` empieza con una base de datos vacía.
+
+**Problemas encontrados y resueltos:**
+
+**1. `DATABASE_URL` era `undefined` en el contexto de Vitest**
+
+El helper usaba `join(__dirname, '../../../../.env')` para encontrar el `.env`. En el contexto de ejecución de Vitest, `__dirname` resuelve a la ruta del archivo dentro de `src/`, pero el número de niveles hacia arriba era incorrecto — llegaba a `packages/backend/`, no a la raíz del monorepo donde vive `.env`.
+
+Solución: usar `process.cwd()` en lugar de `__dirname`. Vitest siempre establece `process.cwd()` al directorio raíz del paquete (`packages/backend/`), desde donde subir dos niveles (`../../.env`) sí alcanza la raíz del monorepo.
+
+**2. TypeORM no podía cargar las ORM Entities desde un glob en tests**
+
+La configuración inicial del DataSource de test usaba un glob string:
+```typescript
+entities: ['../entities/*.orm-entity.{ts,js}']
+```
+
+En el contexto de tests, TypeORM intenta cargar estos archivos con `require()` en tiempo de ejecución. Pero SWC (que transforma los archivos) solo actúa sobre imports estáticos, no sobre `require()` dinámico a archivos `.ts` crudos. Resultado: `SyntaxError: Invalid or unexpected token`.
+
+Solución: importar las clases directamente:
+```typescript
+import { UserOrmEntity } from '../entities/user.orm-entity';
+// ...
+entities: [UserOrmEntity, ProviderOrmEntity, ...]
+```
+
+Los imports estáticos sí son procesados por SWC, y TypeORM recibe las clases ya transpiladas.
+
+**Cobertura de los tests de integración:**
+
+| Suite | Tests | Qué verifica |
+|---|---|---|
+| `UserTypeOrmRepository` | 11 | save, findById, findByEmail, findAll, delete, round-trip |
+| `ProviderTypeOrmRepository` | 7 | save, findById, findByName, findAll, round-trip |
+| `InvoiceTypeOrmRepository` | 10 | save, findById, findByUploaderId, findAll con filtros, delete, round-trip |
+| `AuditEventTypeOrmRepository` | 8 | save, findById, findAll con filtros, round-trip |
+| **Total** | **36** | — |
+
+---
+
+**Resumen de tests al cerrar FASE 3:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 21 | 120 |
+| Integration (repositorios reales) | 4 | 36 |
+| **Total** | **25** | **156** |
+
+**Commit de cierre:**
+```
+feat(infrastructure): add TypeORM setup, migrations, mappers and repository implementations
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*

@@ -2,8 +2,8 @@ import { randomUUID } from 'crypto';
 import { User, CreateUserProps, UserRole } from '../../entities/user.entity';
 
 const defaultProps = (): CreateUserProps => ({
-  id: 'user-' + randomUUID(),
-  email: 'test@example.com',
+  id: randomUUID(),
+  email: `user-${randomUUID()}@example.com`,
   role: UserRole.UPLOADER,
   createdAt: new Date('2025-01-15'),
 });

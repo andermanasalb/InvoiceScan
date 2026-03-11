@@ -3,8 +3,8 @@ import { Provider, CreateProviderProps } from '../../entities/provider.entity';
 import { ProviderName } from '../../value-objects';
 
 const defaultProps = (): CreateProviderProps => ({
-  id: 'provider-' + randomUUID(),
-  name: ProviderName.create('Telefonica')._unsafeUnwrap(),
+  id: randomUUID(),
+  name: ProviderName.create(`Provider-${randomUUID()}`)._unsafeUnwrap(),
   adapterType: 'telefonica',
   createdAt: new Date('2025-01-15'),
 });

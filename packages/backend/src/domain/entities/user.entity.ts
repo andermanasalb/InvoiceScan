@@ -41,6 +41,14 @@ export class User {
     return ok(new User(props.id, props.email, props.role, props.createdAt));
   }
 
+  /**
+   * Reconstructs a User from persisted data (e.g. from the database).
+   * Skips validation — data is assumed to be already valid.
+   */
+  static reconstruct(props: CreateUserProps): User {
+    return new User(props.id, props.email, props.role, props.createdAt);
+  }
+
   getId(): string {
     return this.id;
   }

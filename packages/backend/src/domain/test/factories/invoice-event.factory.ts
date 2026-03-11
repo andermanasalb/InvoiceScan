@@ -3,11 +3,11 @@ import { InvoiceEvent, CreateInvoiceEventProps } from '../../entities/invoice-ev
 import { InvoiceStatusEnum } from '../../value-objects';
 
 const defaultProps = (): CreateInvoiceEventProps => ({
-  id: 'ievent-' + randomUUID(),
-  invoiceId: 'inv-123',
+  id: randomUUID(),
+  invoiceId: randomUUID(),
   from: InvoiceStatusEnum.PENDING,
   to: InvoiceStatusEnum.PROCESSING,
-  userId: 'user-456',
+  userId: randomUUID(),
   timestamp: new Date('2025-01-15'),
 });
 
