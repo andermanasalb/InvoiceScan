@@ -7,12 +7,14 @@ import { Invoice } from '../../domain/entities';
 import { InvoiceAmount, InvoiceDate } from '../../domain/value-objects';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvalidFieldError } from '../../domain/errors';
+import type { InvoiceQueuePort } from '../../infrastructure/queue/invoice-queue.service';
 
 export class UploadInvoiceUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
     private readonly storage: StoragePort,
     private readonly auditor: AuditPort,
+    private readonly queue: InvoiceQueuePort,
   ) {}
 
   async execute(
@@ -44,6 +46,9 @@ export class UploadInvoiceUseCase {
     const invoice = invoiceResult.value;
 
     await this.invoiceRepo.save(invoice);
+
+    // Encola el job de OCR — el worker procesará la factura en background
+    await this.queue.enqueueProcessing(invoice.getId());
 
     await this.auditor.record({
       action: 'upload',

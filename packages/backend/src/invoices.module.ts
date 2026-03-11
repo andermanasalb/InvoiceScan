@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
+import { QueueModule } from './infrastructure/queue/queue.module';
 import { STORAGE_TOKEN } from './infrastructure/storage/local-storage.adapter';
 import { NoOpAuditAdapter, AUDIT_TOKEN } from './infrastructure/audit/no-op-audit.adapter';
+import { InvoiceQueueService } from './infrastructure/queue/invoice-queue.service';
 import { UploadInvoiceUseCase } from './application/use-cases/upload-invoice.use-case';
 import {
   InvoicesController,
@@ -11,6 +13,7 @@ import {
 import type { InvoiceRepository } from './domain/repositories';
 import type { StoragePort } from './application/ports/storage.port';
 import type { AuditPort } from './application/ports/audit.port';
+import type { InvoiceQueuePort } from './infrastructure/queue/invoice-queue.service';
 
 /**
  * InvoicesModule
@@ -23,12 +26,12 @@ import type { AuditPort } from './application/ports/audit.port';
  *           → InvoiceRepository  (from DatabaseModule)
  *           → StoragePort        (from StorageModule via STORAGE_TOKEN)
  *           → AuditPort          (NoOpAuditAdapter for now, real one in FASE 9)
+ *           → InvoiceQueuePort   (InvoiceQueueService — encola el job de OCR)
  *
- * The use case is registered under UPLOAD_INVOICE_USE_CASE_TOKEN so the
- * controller can inject it without depending on the concrete class directly.
+ * El OCR se procesa en background via ProcessInvoiceWorker (JobsModule).
  */
 @Module({
-  imports: [DatabaseModule, StorageModule],
+  imports: [DatabaseModule, StorageModule, QueueModule],
   controllers: [InvoicesController],
   providers: [
     // Temporary no-op auditor — replaced with real TypeORM impl in FASE 9
@@ -43,8 +46,9 @@ import type { AuditPort } from './application/ports/audit.port';
         invoiceRepo: InvoiceRepository,
         storage: StoragePort,
         auditor: AuditPort,
-      ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor),
-      inject: ['InvoiceRepository', STORAGE_TOKEN, AUDIT_TOKEN],
+        queue: InvoiceQueuePort,
+      ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor, queue),
+      inject: ['InvoiceRepository', STORAGE_TOKEN, AUDIT_TOKEN, InvoiceQueueService],
     },
   ],
 })

@@ -21,6 +21,7 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
 # IDE
 .vscode/

@@ -56,14 +56,13 @@ packages/
 │       │   ├── dtos/            ← Input/Output DTOs con Zod
 │       │   └── ports/           ← Interfaces para servicios externos (email, ocr, llm...)
 │       │
-│       ├── infrastructure/      ← Todo lo externo: DB, email, OCR, LLM, colas, HTTP
-│       │   ├── db/              ← TypeORM entities, migrations, repositories impl.
-│       │   ├── ocr/             ← TesseractAdapter, GoogleVisionAdapter
-│       │   ├── llm/             ← AIStudioAdapter (implementación de LLMPort)
-│       │   ├── queue/           ← BullMQ producers y workers
-│       │   ├── email/           ← NodemailerAdapter
-│       │   ├── storage/         ← LocalStorageAdapter, S3Adapter
-│       │   └── adapters/        ← Proveedores: Telefonica, Amazon, Generic...
+│   ├── infrastructure/      ← Todo lo externo: DB, email, OCR, LLM, colas, HTTP
+│   │   ├── db/              ← TypeORM entities, migrations, repositories impl.
+│   │   ├── ocr/             ← TesseractAdapter
+│   │   ├── llm/             ← AIStudioAdapter (implementación de LLMPort)
+│   │   ├── queue/           ← BullMQ producers y workers
+│   │   ├── email/           ← NodemailerAdapter
+│   │   └── storage/         ← LocalStorageAdapter, S3Adapter
 │       │
 │       ├── interface/           ← NestJS controllers, guards, pipes, interceptors
 │       │   ├── http/

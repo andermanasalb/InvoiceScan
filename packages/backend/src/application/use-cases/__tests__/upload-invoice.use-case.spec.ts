@@ -5,6 +5,7 @@ import { StoragePort } from '../../ports';
 import { AuditPort } from '../../ports';
 import { UploadInvoiceInput } from '../../dtos';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
+import type { InvoiceQueuePort } from '../../../infrastructure/queue/invoice-queue.service';
 
 const makeInput = (overrides?: Partial<UploadInvoiceInput>): UploadInvoiceInput => ({
   uploaderId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
@@ -19,6 +20,7 @@ describe('UploadInvoiceUseCase', () => {
   let mockRepo: InvoiceRepository;
   let mockStorage: StoragePort;
   let mockAudit: AuditPort;
+  let mockQueue: InvoiceQueuePort;
   let useCase: UploadInvoiceUseCase;
 
   beforeEach(() => {
@@ -45,7 +47,11 @@ describe('UploadInvoiceUseCase', () => {
       record: vi.fn().mockResolvedValue(undefined),
     };
 
-    useCase = new UploadInvoiceUseCase(mockRepo, mockStorage, mockAudit);
+    mockQueue = {
+      enqueueProcessing: vi.fn().mockResolvedValue(undefined),
+    };
+
+    useCase = new UploadInvoiceUseCase(mockRepo, mockStorage, mockAudit, mockQueue);
   });
 
   describe('execute', () => {
@@ -66,6 +72,15 @@ describe('UploadInvoiceUseCase', () => {
       await useCase.execute(makeInput());
 
       expect(mockRepo.save).toHaveBeenCalledOnce();
+    });
+
+    it('should enqueue the OCR job after saving the invoice', async () => {
+      const result = await useCase.execute(makeInput());
+
+      expect(mockQueue.enqueueProcessing).toHaveBeenCalledOnce();
+      expect(mockQueue.enqueueProcessing).toHaveBeenCalledWith(
+        result._unsafeUnwrap().invoiceId,
+      );
     });
 
     it('should record an audit event', async () => {

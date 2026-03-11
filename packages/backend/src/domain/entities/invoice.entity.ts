@@ -135,7 +135,8 @@ export class Invoice {
   markValidationFailed(
     errors: string[],
   ): Result<void, InvalidStateTransitionError> {
-    if (this.status.getValue() !== InvoiceStatusEnum.EXTRACTED) {
+    const allowedFrom = [InvoiceStatusEnum.PROCESSING, InvoiceStatusEnum.EXTRACTED];
+    if (!allowedFrom.includes(this.status.getValue() as InvoiceStatusEnum)) {
       return err(
         new InvalidStateTransitionError(
           this.status.getValue(),

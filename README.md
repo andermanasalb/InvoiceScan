@@ -1003,4 +1003,184 @@ feat(infrastructure): add file upload with LocalStorageAdapter, FileValidationPi
 
 ---
 
+### FASE 5+6 — OCR con Tesseract, ProcessInvoiceUseCase y colas BullMQ
+
+**¿Qué hicimos?**
+
+Implementamos el procesamiento asíncrono de facturas: tras la subida, un job de BullMQ orquesta el OCR (extracción de texto del PDF con Tesseract) y actualiza el estado de la factura. También añadimos Bull Board, una UI web para monitorizar las colas en tiempo real.
+
+Esta fase combina dos fases del plan original (FASE 5 = OCR y FASE 6 = colas) porque están estrechamente relacionadas: el worker de la cola invoca el use case que llama al OCR.
+
+---
+
+#### Bloque 1 — `OcrPort` y `ProcessInvoiceUseCase`
+
+**`OcrPort`** es la interfaz del puerto OCR en `src/application/ports/ocr.port.ts`:
+
+```typescript
+export interface OcrPort {
+  extractText(buffer: Buffer): Promise<OcrResult>;
+}
+
+export type OcrResult =
+  | { success: true; text: string }
+  | { success: false; error: string };
+```
+
+El use case recibe el `OcrPort` como dependencia — no sabe si el OCR lo hace Tesseract, Google Vision u otra librería. Esta es la **D de SOLID**: depende de la abstracción, no de la implementación concreta.
+
+**`ProcessInvoiceUseCase`** orquesta todo el flujo de procesamiento:
+
+```
+1. Busca la factura por ID
+2. Recupera el PDF del storage (StoragePort)
+3. Llama al OCR (OcrPort) para extraer el texto
+4. Si OCR falla → invoice.markValidationFailed() → VALIDATION_FAILED
+5. Si OCR OK → invoice.markExtracted({ rawText }) → EXTRACTED
+6. Persiste el cambio
+7. Registra auditoría
+```
+
+Devuelve `Result<Invoice, DomainError>`. Nunca lanza excepciones.
+
+**Cambio retrocompatible en `invoice.entity.ts`:**
+
+El método `markValidationFailed()` aceptaba solo desde `EXTRACTED`. Lo extendimos para aceptar también desde `PROCESSING`, porque si el OCR falla la factura está en `PROCESSING` (nunca llegó a `EXTRACTED`). Los 19 tests de entidad existentes siguieron pasando.
+
+---
+
+#### Bloque 2 — `TesseractAdapter`
+
+`TesseractAdapter` implementa `OcrPort` usando `tesseract.js` v7:
+
+```typescript
+const worker = await createWorker(['spa', 'eng']);
+const { data } = await worker.recognize(buffer);
+await worker.terminate();
+return { success: true, text: data.text };
+```
+
+El worker se crea y destruye en cada llamada. Así no hay estado compartido entre jobs concurrentes — cada procesamiento es completamente independiente.
+
+**`OCR_TOKEN = 'OcrPort'`** es el token de inyección de dependencias. Como `OcrPort` es una interfaz TypeScript (no existe en JavaScript compilado), necesitamos esta constante de string para que NestJS sepa qué instancia inyectar.
+
+Los tests del adaptador mockean `tesseract.js` completamente — no se ejecuta OCR real en los tests unitarios. Esto hace los tests rápidos y deterministas.
+
+---
+
+#### Bloque 3 — BullMQ: colas y worker
+
+**¿Qué es BullMQ?**
+
+BullMQ es una librería de colas de trabajo basada en Redis. En lugar de procesar el OCR sincrónicamente (bloqueando la petición HTTP durante segundos), el upload encola un job y responde inmediatamente. Un worker separado lo procesa en segundo plano.
+
+```
+Usuario sube PDF → HTTP 201 inmediato → Job en Redis → Worker procesa OCR
+```
+
+Esto mejora la experiencia de usuario (no espera el OCR) y la resiliencia del sistema (si el OCR falla, el job se reintenta automáticamente).
+
+**`InvoiceQueueService`** — el productor:
+
+```typescript
+async enqueueProcessing(invoiceId: string, storagePath: string): Promise<void> {
+  await this.queue.add('process', { invoiceId, storagePath }, {
+    attempts: 3,
+    backoff: { type: 'exponential', delay: 2000 },
+  });
+}
+```
+
+Tres reintentos con backoff exponencial: si falla, espera 2s, luego 4s, luego 8s. Si falla tres veces, el job pasa a la Dead Letter Queue (`failed-jobs`).
+
+**`ProcessInvoiceWorker`** — el consumidor:
+
+```typescript
+@Processor(PROCESS_INVOICE_QUEUE)
+export class ProcessInvoiceWorker extends WorkerHost {
+  async process(job: Job): Promise<void> {
+    const result = await this.useCase.execute({
+      invoiceId: job.data.invoiceId,
+      storagePath: job.data.storagePath,
+    });
+    if (result.isErr()) throw new Error(result.error.message);
+  }
+}
+```
+
+El worker delega completamente al `ProcessInvoiceUseCase`. Si el use case devuelve `Err`, el worker lanza un error — BullMQ lo detecta y reintenta el job según la política configurada.
+
+**`UploadInvoiceUseCase` actualizado:**
+
+Añadimos `InvoiceQueuePort` como cuarta dependencia. Tras guardar la factura, encola el job de procesamiento:
+
+```typescript
+await this.queue.enqueueProcessing(invoice.getId(), storedFile.key);
+```
+
+---
+
+#### Bloque 4 — Bull Board: UI de monitorización
+
+Bull Board es una interfaz web que muestra el estado de todas las colas en tiempo real. Se monta en `/admin/queues`.
+
+```typescript
+BullBoardModule.forRoot({
+  route: '/admin/queues',
+  adapter: ExpressAdapter,
+}),
+BullBoardModule.forFeature({
+  name: PROCESS_INVOICE_QUEUE,
+  adapter: BullMQAdapter,
+}),
+```
+
+Desde `/admin/queues` puedes ver:
+- Jobs activos, en espera, completados y fallidos
+- El payload de cada job (`invoiceId`, `storagePath`)
+- El número de reintentos y el error que causó el fallo
+- Botones para reintentar jobs fallidos manualmente
+
+**¿Por qué es útil en producción?**
+
+Cuando un OCR falla repetidamente, puedes ver exactamente qué job falló, con qué datos, y cuántas veces se reintentó — sin necesidad de buscar en logs.
+
+---
+
+#### Problemas encontrados y cómo se resolvieron
+
+**1. `markValidationFailed` rechazaba la transición desde `PROCESSING`**
+
+El OCR falla mientras la factura está en `PROCESSING`. El método solo aceptaba desde `EXTRACTED`. Extendimos la validación para aceptar ambos estados origen sin cambiar el comportamiento existente.
+
+**2. `STORAGE_TOKEN` vs `'StoragePort'` en `JobsModule`**
+
+El `JobsModule` intentaba inyectar el `StoragePort` con la cadena literal `'StoragePort'`, pero `StorageModule` exporta el token bajo la constante `STORAGE_TOKEN = 'STORAGE_TOKEN'`. Ambos strings son distintos. Solución: importar y usar la constante `STORAGE_TOKEN` en lugar de la cadena literal.
+
+**3. `UploadInvoiceUseCase` tiene ahora 4 parámetros en el constructor**
+
+El `useFactory` en `invoices.module.ts` debía recibir el `InvoiceQueueService` como cuarto parámetro. Actualizamos tanto el `inject` array como la firma del `useFactory`.
+
+---
+
+**Resumen de tests al cerrar FASE 5+6:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 21 | 120 |
+| Unit (storage + pipe + controller) | 3 | 24 |
+| Unit (OCR adapter + queue + worker) | 3 | 12 |
+| Integration (repositorios reales) | 4 | 36 |
+| NestJS base | 1 | 1 |
+| **Total** | **32** | **193** |
+
+> Nota: el recuento en la sesión fue 165 tests (sin contar los 36 de integración que corren en suite separada).
+
+**Commit de cierre:**
+```
+feat(ocr+queue): add Tesseract OCR, ProcessInvoiceUseCase and BullMQ worker
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*
