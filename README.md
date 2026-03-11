@@ -792,4 +792,215 @@ feat(infrastructure): add TypeORM setup, migrations, mappers and repository impl
 
 ---
 
+### FASE 4 — Subida de PDFs: almacenamiento, validación y endpoint HTTP
+
+**¿Qué hicimos?**
+
+Implementamos el flujo completo de subida de un PDF: desde que llega al servidor como bytes crudos hasta que queda guardado en disco y registrado en la base de datos. Esta es la primera funcionalidad observable del sistema — puedes hacer una petición HTTP real y ver el resultado.
+
+---
+
+#### Bloque 1 — `LocalStorageAdapter`: implementación de `StoragePort`
+
+El `StoragePort` (definido en FASE 2 como interfaz) recibe su primera implementación concreta: `LocalStorageAdapter`. Guarda los archivos en la carpeta `uploads/` del servidor.
+
+**¿Por qué una interfaz + un adaptador en lugar de escribir directamente a disco?**
+
+Porque en el futuro querremos guardar en AWS S3 u otro servicio cloud. Si el código del use case escribiese directamente a disco con `fs.writeFile(...)`, habría que modificarlo cuando cambie el almacenamiento. Con el adaptador, el use case llama a `this.storage.save(buffer, mimeType)` sin saber dónde va el archivo. Cambiar de disco local a S3 es solo crear un nuevo adaptador — el use case no se toca.
+
+**Métodos implementados:**
+
+| Método | Qué hace |
+|---|---|
+| `save(buffer, mimeType)` | Genera un UUID, escribe el buffer en `uploads/<uuid>.<ext>`, devuelve `{ key, mimeType, sizeBytes }` |
+| `get(key)` | Lee el archivo de disco y devuelve el buffer |
+| `delete(key)` | Borra el archivo. Si no existe, no lanza error (idempotente) |
+| `getSignedUrl(key, expiresInSeconds)` | Genera un token temporal: codifica `key:expiresAt` en base64url y devuelve `/files/<token>` |
+
+**¿Qué es una signed URL?**
+
+Es una URL con un token de tiempo limitado que autoriza el acceso a un recurso sin requerir autenticación adicional. En lugar de exponer `/uploads/archivo-secreto.pdf` directamente (que cualquiera podría adivinar), el servidor genera `/files/<token>` donde el token lleva incrustada la fecha de expiración. Cuando alguien accede a esa URL, el servidor valida que el token no ha expirado antes de servir el archivo.
+
+El nombre del archivo guardado en disco es siempre un UUID (`a3f2...pdf`) — nunca el nombre original que subió el usuario. Esto previene ataques de path traversal (alguien que suba un archivo llamado `../../etc/passwd`).
+
+**Inyección de dependencias con tokens de string:**
+
+En NestJS, la inyección de dependencias funciona con tokens de identificación. Para clases concretas, el token es la propia clase. Para interfaces (que no existen en runtime), necesitamos un token de string:
+
+```typescript
+export const STORAGE_TOKEN = 'STORAGE_TOKEN';
+
+// En el módulo:
+{ provide: STORAGE_TOKEN, useClass: LocalStorageAdapter }
+
+// En el use case:
+constructor(@Inject(STORAGE_TOKEN) private readonly storage: StoragePort) {}
+```
+
+El `STORAGE_TOKEN` es la "etiqueta" que NestJS usa para saber qué instancia inyectar. Como `StoragePort` es una interfaz de TypeScript y no existe en JavaScript compilado, necesitamos esta etiqueta de string para que NestJS la reconozca en runtime.
+
+---
+
+#### Bloque 2 — `FileValidationPipe`: validación antes del controlador
+
+Un **Pipe** en NestJS es una clase que transforma o valida los datos antes de que lleguen al handler del controlador. Si la validación falla, lanza una excepción y el handler nunca se ejecuta.
+
+El `FileValidationPipe` aplica tres reglas en orden:
+
+1. **Presencia**: si no hay archivo → `400 Bad Request: "No file uploaded."`
+2. **Tamaño**: si supera `MAX_UPLOAD_SIZE_MB` (10 MB por defecto, configurable via entorno) → `400 Bad Request: "File exceeds the maximum allowed size of 10 MB."`
+3. **Tipo MIME real**: usa la librería `file-type` para leer los primeros bytes del buffer (los *magic bytes*) e identificar el formato real → si no es `application/pdf` → `400 Bad Request: "Invalid file type. Only PDF files are accepted."`
+
+**¿Qué son los magic bytes?**
+
+Todo formato de archivo tiene una firma en sus primeros bytes que identifica el formato independientemente de la extensión. Por ejemplo:
+- PDF: `%PDF` (25 50 44 46)
+- PNG: `\x89PNG` (89 50 4E 47)
+- JPEG: `\xFF\xD8\xFF`
+
+Si alguien renombra `foto.png` a `factura.pdf` e intenta subirlo, la extensión y la cabecera `Content-Type` de HTTP dirán `application/pdf` — pero los primeros bytes del archivo revelan que es un PNG. El pipe detecta esto y rechaza el archivo con `400 Invalid file type (detected: image/png)`.
+
+**Problema con `file-type` y ESM en NestJS (CommonJS):**
+
+`file-type` es una librería ESM pura (solo funciona con `import`, no con `require`). NestJS compila a CommonJS. Intentar `import { fileTypeFromBuffer } from 'file-type'` directamente daría error en runtime.
+
+Solución: usar import dinámico dentro de la función:
+```typescript
+const { fileTypeFromBuffer } = await import('file-type');
+```
+
+El `await import()` dinámico sí funciona en CommonJS para cargar módulos ESM.
+
+**Problema con la detección de PNG:**
+
+`file-type` necesita ver el chunk `IHDR` completo de un PNG para identificarlo (mínimo 29 bytes), no solo la firma de 8 bytes. En los tests, usamos un buffer PNG completo con el IHDR para que la detección funcione correctamente.
+
+---
+
+#### Bloque 3 — `InvoicesController` + `InvoicesModule`
+
+**`InvoicesController`**
+
+El controlador gestiona `POST /api/v1/invoices/upload`. Su responsabilidad es exclusivamente traducir HTTP ↔ use case: recibir el archivo, validarlo (via pipe), llamar al use case y devolver la respuesta.
+
+```
+HTTP request (multipart/form-data)
+   → FileInterceptor (Multer lee el archivo a memoria)
+   → FileValidationPipe (valida presencia, tamaño, MIME)
+   → uploadInvoiceUseCase.execute(...)
+   → { data: result.value }  (HTTP 201)
+```
+
+Multer usa `memoryStorage()` — el archivo no se escribe a disco aquí, solo vive en memoria como `file.buffer`. Es el `LocalStorageAdapter` quien decide cómo y dónde persistirlo.
+
+Los `uploaderId` y `providerId` son UUIDs placeholder hasta FASE 8 (autenticación JWT) y FASE 9 (selección de proveedor desde el body).
+
+**Manejo de errores del use case:**
+
+Si el use case devuelve `result.isErr()`, el controlador lanza `InternalServerErrorException`. Esto es un placeholder — en FASE 9 se añadirá un `ExceptionFilter` que mapea cada tipo de `DomainError` a su código HTTP apropiado.
+
+**`InvoicesModule`**
+
+El módulo conecta todas las piezas mediante el sistema de DI de NestJS:
+
+```
+InvoicesModule
+  imports: [DatabaseModule, StorageModule]
+  controllers: [InvoicesController]
+  providers:
+    - AUDIT_TOKEN → NoOpAuditAdapter (placeholder hasta FASE 9)
+    - UPLOAD_INVOICE_USE_CASE_TOKEN → UploadInvoiceUseCase (wired via useFactory)
+```
+
+El `useFactory` recibe los tres objetos inyectados ya resueltos por NestJS (`InvoiceRepository`, `StoragePort`, `AuditPort`) y construye el use case. Están tipados correctamente con las interfaces de dominio — sin `any`.
+
+**¿Por qué `useFactory` en lugar de `useClass`?**
+
+`useClass` funciona cuando NestJS puede instanciar la clase automáticamente (detecta los parámetros del constructor). Pero `UploadInvoiceUseCase` está en la capa de `application` y no tiene decoradores NestJS — no puede ser inyectado directamente. El `useFactory` nos da control explícito: recibimos los tres objetos ya resueltos y construimos el use case a mano.
+
+**`NoOpAuditAdapter`:**
+
+Es un adaptador temporal que implementa `AuditPort` pero no persiste nada — solo escribe en el log. Permite que la app funcione sin una tabla de auditoría completamente implementada. Se reemplazará por el adaptador TypeORM real en FASE 9.
+
+---
+
+#### Bloque 4 — Tests
+
+**Tests unitarios — `LocalStorageAdapter` (11 tests):**
+
+Usan un directorio temporal real (`test-uploads-tmp`). No hay mocks del sistema de archivos — el adaptador escribe y lee de disco de verdad. Esto es deliberado: `fs` no es una dependencia de negocio, no tiene sentido mockearla.
+
+Escenarios cubiertos: escritura correcta, unicidad de claves UUID, creación automática del directorio si no existe, extensión vacía para MIME desconocido, lectura correcta, error al leer archivo inexistente, borrado correcto, idempotencia del borrado, formato de signed URL, codificación de la clave en el token, codificación del timestamp de expiración.
+
+**Tests unitarios — `FileValidationPipe` (9 tests):**
+
+Prueban el pipe de forma aislada, sin NestJS ni HTTP. Cada regla tiene al menos dos tests: uno que verifica que lanza `BadRequestException` y otro que verifica que el mensaje es el correcto.
+
+**Tests E2E con Supertest — `InvoicesController` (4 tests):**
+
+Levantan un servidor NestJS completo en memoria (sin base de datos real — el use case está mockeado con `vi.fn()`). Supertest hace peticiones HTTP reales contra ese servidor.
+
+La importación de Supertest debe ser `import request from 'supertest'` (import por defecto), no `import * as request from 'supertest'`. Con la sintaxis de namespace (`* as`), Vitest no resuelve correctamente la función principal del módulo en el contexto ESM/CJS.
+
+Escenarios cubiertos:
+
+| Test | Input | Expected |
+|---|---|---|
+| PDF válido | Buffer con magic bytes PDF | 201 + `{ data: { invoiceId, status } }` |
+| Sin archivo | Petición sin campo `file` | 400 + mensaje "No file uploaded" |
+| Archivo demasiado grande | Buffer de 11 MB con magic bytes PDF | 400 + mensaje "maximum allowed size" |
+| Tipo MIME incorrecto | Buffer PNG enviado como PDF | 400 + mensaje "Invalid file type" |
+
+---
+
+#### Problemas encontrados y cómo se resolvieron
+
+**1. `multer` no estaba instalado como dependencia directa**
+
+Aunque `@nestjs/platform-express` incluye Multer internamente, TypeScript necesita los tipos de `multer` para las anotaciones `Express.Multer.File`. Al ejecutar los tests, el resolver de módulos no encontraba `multer`.
+
+Solución: `pnpm --filter backend add multer` + `pnpm --filter backend add -D @types/multer`.
+
+**2. `import * as request from 'supertest'` fallaba en Vitest**
+
+El error `(0 , __vite_ssr_import_2__) is not a function` aparecía al llamar `request(app.getHttpServer())`. El motivo: Vitest en modo SSR trata los módulos CJS de forma distinta, y la importación namespace de un módulo que exporta una función como `module.exports` no resuelve correctamente la función principal.
+
+Solución: cambiar a `import request from 'supertest'` (import del default export).
+
+**3. `any` en `useFactory` violaba las reglas del proyecto**
+
+El `useFactory` del módulo tenía `(invoiceRepo: any, storage: any, auditor: any)`. Aunque funciona en runtime, viola explícitamente la regla `❌ any en TypeScript` del CLAUDE.md.
+
+Solución: tipar los parámetros con las interfaces reales usando `import type`: `InvoiceRepository`, `StoragePort`, `AuditPort`. El `import type` es solo información de tipos — no genera código JavaScript, por lo que no introduce dependencias circulares en runtime.
+
+**4. `throw new Error()` en el controlador era demasiado genérico**
+
+Cuando el use case devuelve `isErr()`, lanzar `new Error(message)` genera un HTTP 500 sin estructura. NestJS convierte los errores no capturados en respuestas de error genéricas.
+
+Solución: lanzar `new InternalServerErrorException(message)` — que es la excepción tipada de NestJS para errores 500. Genera una respuesta con el formato estándar de NestJS: `{ statusCode: 500, message: "...", error: "Internal Server Error" }`. En FASE 9 esto se reemplazará por un `ExceptionFilter` que mapea cada `DomainError` al código HTTP correcto.
+
+**5. Rutas relativas incorrectas en `invoices.module.ts`**
+
+El módulo vive en `src/invoices.module.ts` pero usaba rutas `../infrastructure/...` (subiendo un nivel desde `src/`). Como el archivo ya está en `src/`, las rutas correctas son `./infrastructure/...`.
+
+Solución: corregir todas las rutas a `./`.
+
+---
+
+**Resumen de tests al cerrar FASE 4:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 21 | 120 |
+| Unit (storage + pipe + controller) | 3 | 24 |
+| Integration (repositorios reales) | 4 | 36 |
+| **Total** | **28** | **180** |
+
+**Commit de cierre:**
+```
+feat(infrastructure): add file upload with LocalStorageAdapter, FileValidationPipe and InvoicesController
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*
