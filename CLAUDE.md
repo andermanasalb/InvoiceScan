@@ -744,19 +744,7 @@ FASE 5  : OCR Tesseract + parsing             (3h)   ✅
 FASE 6  : Colas BullMQ + workers + Bull Board (3h)   ✅
 FASE 7  : Adapters por proveedor              (3h)   ✅
 FASE 8  : Auth JWT + roles + guards           (3h)   ✅
-FASE 9  : Controllers HTTP + Zod pipes + EventBus + Outbox  (4h)  ← EN PROGRESO
-            Bloque 1 ✅ : DomainErrorFilter + helmet + CORS + AuthController refactor
-            Bloque 2 ✅ : GET /invoices + GET /invoices/:id + RolesGuard global
-            Bloque 3  : PATCH approve + PATCH reject + EventBus + Outbox pattern
-              Bloque 3a : Domain events + EventBusPort + OutboxEventBusAdapter
-                          + tabla outbox_events + NoOpNotificationAdapter
-                          + ApproveInvoiceUseCase / RejectInvoiceUseCase refactor
-                          + InvoicesController PATCH endpoints
-              Bloque 3b : OutboxPollerWorker (BullMQ Repeatable) + handlers no-op
-                          + EventEmitterModule en AppModule
-            Bloque 4  : GET /invoices/:id/events
-            Bloque 5  : Cleanup upload (providerId body) + @Roles en todos endpoints
-            Bloque 6  : Coverage check + typecheck + commit
+FASE 9  : Controllers HTTP + Zod pipes + EventBus + Outbox  (4h)  ✅
 FASE 10 : Frontend React                      (5h)
 FASE 11 : Emails Nodemailer                   (2h)
             → Solo cambiar InvoiceApprovedHandler / InvoiceRejectedHandler
