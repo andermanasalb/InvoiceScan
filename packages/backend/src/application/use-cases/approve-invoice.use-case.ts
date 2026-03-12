@@ -1,16 +1,17 @@
 import { ok, err, Result } from 'neverthrow';
 import { InvoiceRepository } from '../../domain/repositories';
-import { AuditPort, NotificationPort } from '../ports';
+import { AuditPort } from '../ports';
+import { EventBusPort } from '../ports/event-bus.port';
 import { ApproveInvoiceInput, ApproveInvoiceOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError } from '../../domain/errors';
-import { InvoiceStatusEnum } from '../../domain/value-objects';
+import { InvoiceApprovedEvent } from '../../domain/events/invoice-approved.event';
 
 export class ApproveInvoiceUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
     private readonly auditor: AuditPort,
-    private readonly notifier: NotificationPort,
+    private readonly eventBus: EventBusPort,
   ) {}
 
   async execute(
@@ -30,12 +31,13 @@ export class ApproveInvoiceUseCase {
       userId: input.approverId,
     });
 
-    await this.notifier.notifyStatusChange({
-      invoiceId: invoice.getId(),
-      status: InvoiceStatusEnum.APPROVED,
-      recipientEmail: '',
-      recipientName: '',
-    });
+    await this.eventBus.publish(
+      new InvoiceApprovedEvent({
+        invoiceId: invoice.getId(),
+        approverId: input.approverId,
+        status: invoice.getStatus().getValue(),
+      }),
+    );
 
     return ok({
       invoiceId: invoice.getId(),

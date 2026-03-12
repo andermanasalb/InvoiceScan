@@ -9,6 +9,7 @@ import {
   InvoiceOrmEntity,
   InvoiceEventOrmEntity,
   AuditEventOrmEntity,
+  OutboxEventOrmEntity,
 } from './entities';
 
 import {
@@ -18,7 +19,12 @@ import {
   UserCredentialTypeOrmRepository,
   USER_CREDENTIAL_REPOSITORY,
   AuditEventTypeOrmRepository,
+  OutboxEventTypeOrmRepository,
+  InvoiceEventTypeOrmRepository,
 } from './repositories';
+
+import { OUTBOX_EVENT_REPOSITORY } from '../../domain/repositories/outbox-event.repository.js';
+import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository.js';
 
 @Module({
   imports: [
@@ -48,6 +54,7 @@ import {
       InvoiceOrmEntity,
       InvoiceEventOrmEntity,
       AuditEventOrmEntity,
+      OutboxEventOrmEntity,
     ]),
   ],
   providers: [
@@ -58,6 +65,8 @@ import {
     { provide: 'UserRepository', useClass: UserTypeOrmRepository },
     { provide: USER_CREDENTIAL_REPOSITORY, useClass: UserCredentialTypeOrmRepository },
     { provide: 'AuditEventRepository', useClass: AuditEventTypeOrmRepository },
+    { provide: OUTBOX_EVENT_REPOSITORY, useClass: OutboxEventTypeOrmRepository },
+    { provide: INVOICE_EVENT_REPOSITORY, useClass: InvoiceEventTypeOrmRepository },
   ],
   exports: [
     'InvoiceRepository',
@@ -65,6 +74,8 @@ import {
     'UserRepository',
     USER_CREDENTIAL_REPOSITORY,
     'AuditEventRepository',
+    OUTBOX_EVENT_REPOSITORY,
+    INVOICE_EVENT_REPOSITORY,
   ],
 })
 export class DatabaseModule {}

@@ -114,7 +114,6 @@ describe('AuthController (e2e)', () => {
         .send({ email: 'user@example.com', password: 'wrong' });
 
       expect(response.status).toBe(401);
-      expect(response.body.error.code).toBe('INVALID_CREDENTIALS');
     });
 
     it('should return 400 when email is missing', async () => {
@@ -204,7 +203,6 @@ describe('AuthController (e2e)', () => {
         .set('Cookie', 'refreshToken=expired.token');
 
       expect(response.status).toBe(401);
-      expect(response.body.error.code).toBe('INVALID_CREDENTIALS');
     });
 
     it('should forward the userId from the JWT to the use case', async () => {

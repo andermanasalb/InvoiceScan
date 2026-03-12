@@ -1355,4 +1355,1345 @@ feat(llm): add AIStudioAdapter, LLM extraction in ProcessInvoiceUseCase
 
 ---
 
+### FASE 8 — Autenticación JWT + roles + guards
+
+**¿Qué hicimos?**
+
+Hasta este punto, cualquier persona podía llamar a `POST /api/v1/invoices/upload` sin identificarse. La API no tenía ningún mecanismo de autenticación ni de control de acceso. En esta fase lo añadimos todo:
+
+- **Autenticación**: verificamos que quien llama a la API es quien dice ser, usando JWT (JSON Web Tokens).
+- **Autorización**: verificamos que el usuario autenticado tiene permiso para hacer lo que intenta, usando RBAC (Role-Based Access Control).
+
+Al cerrar esta fase, la API tiene un sistema de login completo con tokens de acceso y refresh, cookies HttpOnly, revocación de tokens en Redis y control de acceso por roles en cada endpoint.
+
+---
+
+#### ¿Qué es un JWT? ¿Por qué no usar sesiones?
+
+Un **JWT (JSON Web Token)** es una cadena de texto en tres partes separadas por puntos:
+
+```
+eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyIsInJvbGUiOiJ1cGxvYWRlciJ9.Xsv3...
+     HEADER                          PAYLOAD                              SIGNATURE
+```
+
+- **Header**: indica el algoritmo de firma (`HS256` = HMAC-SHA256).
+- **Payload**: contiene los datos del usuario (`sub` = userId, `role`, `iat` = issued at, `exp` = expires at). Estos datos son visibles — no están cifrados, solo codificados en Base64.
+- **Signature**: firma HMAC que garantiza que el token no ha sido manipulado. Se genera con el `JWT_SECRET` que solo conoce el servidor.
+
+**¿Por qué JWT y no sesiones?**
+
+Con sesiones, el servidor guarda el estado de cada usuario autenticado en memoria o en base de datos. Con JWT, el token es **autocontenido** — el servidor puede verificar la identidad leyendo el token sin consultar ninguna base de datos (basta con verificar la firma con el `JWT_SECRET`). Esto hace el sistema más escalable y más fácil de distribuir entre múltiples instancias del servidor.
+
+El trade-off: un JWT no se puede "revocar" antes de su expiración... a menos que uses una lista de tokens revocados en Redis, que es exactamente lo que hacemos con los refresh tokens.
+
+---
+
+#### ¿Qué son el access token y el refresh token?
+
+Usamos dos tokens con responsabilidades distintas:
+
+| | Access Token | Refresh Token |
+|---|---|---|
+| **Duración** | 15 minutos | 7 días |
+| **Dónde vive** | Header `Authorization: Bearer <token>` | Cookie HttpOnly |
+| **Para qué sirve** | Autenticar cada petición a la API | Obtener un nuevo access token cuando el actual expira |
+| **Se puede revocar?** | No (expira solo) | Sí (se borra de Redis en logout) |
+
+**¿Por qué el access token dura solo 15 minutos?**
+
+Si alguien intercepta tu access token, solo puede usarlo durante 15 minutos. Si durase días, sería un desastre de seguridad.
+
+**¿Por qué el refresh token vive en una cookie HttpOnly?**
+
+Una cookie `HttpOnly` es una cookie que el navegador envía automáticamente en cada petición pero que el código JavaScript de la página **no puede leer**. Esto la hace inmune a ataques XSS (Cross-Site Scripting), donde código malicioso inyectado en la página intenta robar tokens del `localStorage`.
+
+Si el access token estuviese en `localStorage`, cualquier script malicioso podría leerlo con `localStorage.getItem('token')`. En una cookie HttpOnly, eso es imposible.
+
+---
+
+#### Bloque 1 — `JwtStrategy`: cómo NestJS verifica el JWT en cada petición
+
+`JwtStrategy` es la pieza que Passport (la librería de autenticación) usa para verificar el token en cada petición autenticada.
+
+```typescript
+// packages/backend/src/interface/http/guards/jwt.strategy.ts
+
+export interface JwtPayload {
+  sub: string;   // userId (estándar RFC 7519: "subject")
+  role: string;
+  iat?: number;  // issued at
+  exp?: number;  // expires at
+}
+
+export interface AuthenticatedUser {
+  userId: string;
+  role: string;
+}
+
+@Injectable()
+export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
+  constructor(configService: ConfigService) {
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: configService.get<string>('JWT_SECRET') ?? '',
+    });
+  }
+
+  validate(payload: JwtPayload): AuthenticatedUser {
+    return { userId: payload.sub, role: payload.role };
+  }
+}
+```
+
+**¿Qué hace exactamente Passport cuando llega una petición protegida?**
+
+```
+1. Passport extrae el token del header: Authorization: Bearer eyJ...
+2. Verifica la firma con JWT_SECRET (si es inválida → 401 automático)
+3. Comprueba que no ha expirado (si expiró → 401 automático)
+4. Llama a validate(payload) con los datos decodificados del token
+5. El valor retornado por validate() se escribe en req.user
+```
+
+El método `validate()` simplemente renombra `sub → userId`. El campo `sub` es el estándar RFC 7519 para el identificador del sujeto del token, pero en el resto del código queremos decir `userId` (más legible). Esta traducción ocurre aquí y solo aquí.
+
+**¿Por qué `PassportStrategy(Strategy, 'jwt')` y no directamente `Strategy`?**
+
+`PassportStrategy` es el decorador de NestJS que integra Passport con el sistema de inyección de dependencias. El segundo argumento `'jwt'` es el nombre con que se registra esta estrategia. Más tarde, `AuthGuard('jwt')` usa ese mismo nombre para buscar la estrategia correcta.
+
+---
+
+#### Bloque 2 — `JwtAuthGuard`: el guardián de cada endpoint protegido
+
+Un **Guard** en NestJS es una clase que decide si una petición puede continuar hacia el handler del controlador o se bloquea. Se ejecuta después de los middlewares pero antes de los pipes y el handler.
+
+```typescript
+// packages/backend/src/interface/http/guards/jwt-auth.guard.ts
+
+@Injectable()
+export class JwtAuthGuard extends AuthGuard('jwt') {
+  override canActivate(context: ExecutionContext) {
+    return super.canActivate(context);
+  }
+
+  override handleRequest<TUser = any>(err: any, user: any): TUser {
+    if (err || !user) {
+      throw new UnauthorizedException('Invalid or missing access token');
+    }
+    return user as TUser;
+  }
+}
+```
+
+**¿Por qué extender `AuthGuard('jwt')` en lugar de usarlo directamente?**
+
+El `AuthGuard('jwt')` de Passport, cuando el token es inválido o está ausente, por defecto devuelve `null` en el parámetro `user` del método `handleRequest`. Si no sobreescribes ese método, el guard permitirá que la petición continúe con `req.user = undefined`. El error aparecería mucho más tarde, en algún punto inesperado del código.
+
+Sobreescribir `handleRequest` nos permite **fallar inmediatamente** con un error claro: `UnauthorizedException('Invalid or missing access token')` → HTTP 401.
+
+**Cómo se aplica el guard:**
+
+```typescript
+// A nivel de controlador — protege TODOS los endpoints de la clase:
+@Controller('api/v1/invoices')
+@UseGuards(JwtAuthGuard)
+export class InvoicesController { ... }
+
+// A nivel de endpoint individual — protege solo ese método:
+@Post('refresh')
+@UseGuards(JwtAuthGuard)
+async refresh(...) { ... }
+```
+
+---
+
+#### Bloque 3 — `@Roles()` y `RolesGuard`: control de acceso por rol
+
+La autenticación responde "¿quién eres?". La autorización responde "¿qué puedes hacer?".
+
+**`@Roles()` — el decorador que marca qué roles pueden acceder:**
+
+```typescript
+// packages/backend/src/interface/http/guards/roles.decorator.ts
+
+export const ROLES_KEY = 'roles';
+
+export const Roles = (...roles: UserRoleValue[]) =>
+  SetMetadata(ROLES_KEY, roles);
+```
+
+`SetMetadata` es una función de NestJS que adjunta metadatos a un handler o clase. Es como pegar una etiqueta invisible en el endpoint:
+
+```typescript
+@Patch(':id/approve')
+@Roles('approver', 'admin')   // ← etiqueta: "solo approver y admin"
+async approve(...) { ... }
+```
+
+**`RolesGuard` — el guard que lee esa etiqueta y comprueba el rol del usuario:**
+
+```typescript
+// packages/backend/src/interface/http/guards/roles.guard.ts
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private readonly reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    // 1. Lee los roles requeridos de los metadatos del endpoint
+    const requiredRoles = this.reflector.getAllAndOverride<UserRoleValue[]>(
+      ROLES_KEY,
+      [context.getHandler(), context.getClass()],  // busca en el método, luego en la clase
+    );
+
+    // 2. Si no hay @Roles(), cualquier usuario autenticado puede pasar
+    if (!requiredRoles || requiredRoles.length === 0) return true;
+
+    // 3. Lee el usuario autenticado que JwtAuthGuard escribió en req.user
+    const { user } = context.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+
+    // 4. Comprueba si el rol del usuario está en la lista de roles permitidos
+    if (!user || !requiredRoles.includes(user.role as UserRoleValue)) {
+      throw new ForbiddenException(`Requires one of roles: ${requiredRoles.join(', ')}`);
+    }
+
+    return true;
+  }
+}
+```
+
+**`getAllAndOverride` vs `getAllAndMerge`:**
+
+- `getAllAndOverride`: busca primero en el método, luego en la clase. Si el método tiene `@Roles()`, usa esos. Si no, usa los de la clase. El primero que encuentra "gana".
+- `getAllAndMerge`: combina los roles de método y clase. No lo usamos porque queremos que el decorador en el método sobreescriba el de la clase, no que se sumen.
+
+**Registro global del `RolesGuard`:**
+
+```typescript
+// packages/backend/src/app.module.ts
+providers: [
+  {
+    provide: APP_GUARD,
+    useClass: RolesGuard,
+  },
+],
+```
+
+`APP_GUARD` es un token especial de NestJS que registra el guard como **global** — se aplica automáticamente a todos los endpoints de toda la aplicación sin necesidad de añadir `@UseGuards(RolesGuard)` en cada controlador.
+
+**Orden de ejecución de los guards:** `JwtAuthGuard` (verifica el token) se ejecuta antes que `RolesGuard` (verifica el rol). Esto es importante: el `RolesGuard` necesita que `req.user` esté poblado, lo cual solo ocurre si `JwtAuthGuard` pasó primero. Si no hay token válido, `JwtAuthGuard` lanza el 401 antes de que `RolesGuard` llegue a ejecutarse.
+
+---
+
+#### Bloque 4 — `@CurrentUser()`: el decorador que extrae el usuario del request
+
+En lugar de acceder a `req.user` manualmente en cada método del controlador, creamos un decorador de parámetro que lo hace por nosotros:
+
+```typescript
+// packages/backend/src/interface/http/guards/current-user.decorator.ts
+
+export const CurrentUser = createParamDecorator(
+  (_data: unknown, ctx: ExecutionContext): AuthenticatedUser => {
+    const request = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+    return request.user;
+  },
+);
+```
+
+Uso en el controlador:
+
+```typescript
+// Sin @CurrentUser() — verbose y acoplado a Express
+async approve(@Req() req: Request, @Param('id') id: string) {
+  const user = req.user as AuthenticatedUser;
+  // ...
+}
+
+// Con @CurrentUser() — limpio y tipado
+async approve(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+  // user.userId y user.role ya están disponibles directamente
+}
+```
+
+La ventaja es doble: el código es más limpio, y en los tests del controlador es más fácil de mockear — no necesitas un objeto `Request` completo, solo puedes inyectar `{ user: { userId: 'x', role: 'approver' } }` directamente.
+
+---
+
+#### Bloque 5 — `AuthController`: los tres endpoints de autenticación
+
+```typescript
+// packages/backend/src/interface/http/controllers/auth.controller.ts
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: process.env.NODE_ENV === 'production',  // solo HTTPS en producción
+  sameSite: 'lax' as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000,               // 7 días en milisegundos
+  path: '/',
+};
+```
+
+**`POST /api/v1/auth/login`:**
+
+```typescript
+@Post('login')
+@HttpCode(HttpStatus.OK)
+@Throttle({ default: { limit: 5, ttl: 60000 } })  // máx. 5 intentos por minuto por IP
+async login(
+  @Body(new ZodValidationPipe(LoginInputSchema)) body: LoginInput,
+  @Res({ passthrough: true }) res: Response,
+) {
+  const result = await this.loginUseCase.execute(body);
+  if (result.isErr()) throw new UnauthorizedException(result.error.message);
+
+  const { accessToken, refreshToken, userId, role } = result.value;
+  res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
+  return { data: { accessToken, userId, role } };
+}
+```
+
+Puntos clave:
+- `@Throttle({ default: { limit: 5, ttl: 60000 } })`: limita a 5 intentos por minuto por IP. Protege contra ataques de fuerza bruta.
+- `@Res({ passthrough: true })`: NestJS necesita el objeto `res` de Express para setear la cookie, pero con `passthrough: true` sigue gestionando la serialización del return value. Sin `passthrough: true`, tendrías que llamar a `res.json(...)` manualmente.
+- El `accessToken` va en el body JSON (para que el frontend lo use en el header `Authorization`).
+- El `refreshToken` va en la cookie HttpOnly (para que el navegador lo envíe automáticamente y JavaScript no pueda leerlo).
+
+**`POST /api/v1/auth/refresh`:**
+
+```typescript
+@Post('refresh')
+@HttpCode(HttpStatus.OK)
+@UseGuards(JwtAuthGuard)
+async refresh(
+  @CurrentUser() user: AuthenticatedUser,
+  @Req() req: Request,
+) {
+  const cookies = req.cookies as Record<string, string> | undefined;
+  const refreshToken = cookies?.['refreshToken'];
+
+  if (!refreshToken) throw new UnauthorizedException('No refresh token');
+
+  const result = await this.refreshTokenUseCase.execute({
+    userId: user.userId,
+    refreshToken,
+  });
+
+  if (result.isErr()) throw new UnauthorizedException(result.error.message);
+  return { data: { accessToken: result.value.accessToken } };
+}
+```
+
+¿Por qué este endpoint requiere `JwtAuthGuard` si el access token ha expirado? Porque el frontend llama a `/refresh` cuando el access token está **a punto** de expirar (por ejemplo, 1 minuto antes), no cuando ya ha expirado. Si el access token ya caducó, el usuario necesita hacer login de nuevo.
+
+**`POST /api/v1/auth/logout`:**
+
+```typescript
+@Post('logout')
+@HttpCode(HttpStatus.NO_CONTENT)
+@UseGuards(JwtAuthGuard)
+async logout(
+  @CurrentUser() user: AuthenticatedUser,
+  @Res({ passthrough: true }) res: Response,
+) {
+  await this.logoutUseCase.execute({ userId: user.userId });
+  res.clearCookie('refreshToken', { path: '/' });
+}
+```
+
+El `LogoutUseCase` borra el refresh token de Redis. La cookie se limpia con `clearCookie`. A partir de ese momento, aunque alguien tuviese el refresh token, Redis lo rechazaría porque ya no existe en la lista de tokens válidos.
+
+---
+
+#### Bloque 6 — `AuthModule`: conectar todas las piezas
+
+`AuthModule` es el módulo de NestJS que registra todos los proveedores de autenticación:
+
+```
+AuthModule
+  imports:
+    - PassportModule           ← integración NestJS + Passport
+    - JwtModule.registerAsync  ← configura la firma JWT con JWT_SECRET del entorno
+    - DatabaseModule           ← acceso a UserTypeOrmRepository, UserCredentialTypeOrmRepository
+  providers:
+    - JwtStrategy              ← estrategia de verificación de tokens
+    - LOGIN_USE_CASE_TOKEN     → LoginUseCase
+    - REFRESH_TOKEN_USE_CASE_TOKEN → RefreshTokenUseCase
+    - LOGOUT_USE_CASE_TOKEN    → LogoutUseCase
+    - TOKEN_STORE_TOKEN        → RedisTokenStoreAdapter
+  controllers:
+    - AuthController
+```
+
+**`JwtModule.registerAsync`:**
+
+```typescript
+JwtModule.registerAsync({
+  imports: [ConfigModule],
+  useFactory: (configService: ConfigService) => ({
+    secret: configService.get<string>('JWT_SECRET'),
+    signOptions: { expiresIn: '15m' },
+  }),
+  inject: [ConfigService],
+}),
+```
+
+`registerAsync` en lugar de `register` porque necesitamos leer el secret del `ConfigService` (que a su vez lo lee del `.env`). Si usásemos `register({ secret: process.env.JWT_SECRET })`, el valor se leería en el momento de definir el módulo (antes de que NestJS haya inicializado el `ConfigModule`), lo que podría resultar en `undefined`.
+
+---
+
+#### Bloque 7 — `UserCredentialOrmEntity` y bcrypt
+
+Las credenciales de usuario están en una tabla separada de los usuarios:
+
+```typescript
+// packages/backend/src/infrastructure/db/entities/user-credential.orm-entity.ts
+@Entity('user_credentials')
+export class UserCredentialOrmEntity {
+  @PrimaryColumn('uuid')
+  userId: string;
+
+  @Column({ name: 'password_hash' })
+  passwordHash: string;
+
+  @OneToOne(() => UserOrmEntity)
+  @JoinColumn({ name: 'user_id' })
+  user: UserOrmEntity;
+}
+```
+
+Las contraseñas se almacenan hasheadas con **bcrypt** (salt rounds: 12). Bcrypt es una función de hash diseñada específicamente para contraseñas: es lenta por diseño (para dificultar ataques de fuerza bruta) y añade un salt aleatorio (para que dos usuarios con la misma contraseña tengan hashes distintos).
+
+```typescript
+// Al crear usuario:
+const hash = await bcrypt.hash(password, 12);
+
+// Al verificar login:
+const isValid = await bcrypt.compare(plainPassword, storedHash);
+```
+
+Nunca se guarda la contraseña en texto plano. Nunca. Ni en la base de datos ni en los logs.
+
+---
+
+#### Problemas encontrados en FASE 8 y cómo se resolvieron
+
+**1. `@Throttle` requería configuración del módulo `ThrottlerModule`**
+
+El decorador `@Throttle` de `@nestjs/throttler` solo funciona si `ThrottlerModule` está importado en el módulo raíz. Sin él, NestJS lanza un error al arrancar porque el guard `ThrottlerGuard` no encuentra su configuración.
+
+Solución: importar `ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }])` en `AppModule` como configuración base, y sobreescribir en el endpoint específico de login con `@Throttle({ default: { limit: 5, ttl: 60000 } })`.
+
+**2. `cookieParser` no estaba instalado**
+
+El método `req.cookies` devolvía `undefined` porque el middleware `cookie-parser` no estaba registrado. NestJS no lo instala por defecto — es un middleware de Express que hay que añadir explícitamente.
+
+Solución: `pnpm --filter backend add cookie-parser` + `pnpm --filter backend add -D @types/cookie-parser` + `app.use(cookieParser())` en `main.ts`.
+
+**3. El `RedisTokenStoreAdapter` necesitaba el cliente de ioredis**
+
+`ioredis` no estaba instalado. BullMQ usa Redis internamente pero no expone su cliente. Hay que instalar `ioredis` por separado para poder crear el cliente propio que usa el `TokenStoreAdapter`.
+
+Solución: `pnpm --filter backend add ioredis` + `pnpm --filter backend add -D @types/ioredis`.
+
+---
+
+#### Decisiones de diseño registradas (FASE 8)
+
+| Decisión | Elección | Motivo |
+|---|---|---|
+| Librería auth | Passport + `@nestjs/passport` | Integración nativa con NestJS; soporta múltiples estrategias (local, JWT, OAuth) con el mismo patrón |
+| Access token | JWT en `Authorization: Bearer` header | Estándar de facto para APIs REST; el frontend lo envía en cada petición |
+| Refresh token | JWT en cookie HttpOnly | Inmune a XSS; el navegador lo envía automáticamente; JavaScript no puede leerlo |
+| Revocación refresh token | Redis (lista de tokens válidos) | Redis ya está en el stack para BullMQ; sin coste adicional de infraestructura |
+| Duración access token | 15 minutos | Ventana de exposición pequeña si es interceptado |
+| Duración refresh token | 7 días | Balance entre UX y seguridad |
+| Rate limiting login | 5 req/min por IP | Previene ataques de fuerza bruta sin bloquear usuarios legítimos |
+| Bcrypt salt rounds | 12 | Suficientemente lento para dificultar brute force, suficientemente rápido para UX |
+| `RolesGuard` global | `APP_GUARD` en AppModule | Elimina el ruido de `@UseGuards(RolesGuard)` en cada controlador; no se puede olvidar |
+
+---
+
+**Resumen de tests al cerrar FASE 8:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 22 | 131 |
+| Unit (controllers + guards + pipes) | 4 | 30 |
+| Unit (OCR + LLM + queue + worker) | 4 | 19 |
+| Integration (repositorios reales) | 4 | 36 |
+| NestJS base | 1 | 1 |
+| **Total** | **35** | **217** |
+
+**Commit de cierre:**
+```
+feat(auth): implement JWT auth with roles and guards (FASE 8)
+```
+
+---
+
+### FASE 9 — Controllers HTTP completos + Zod pipes + EventBus + Outbox pattern
+
+**¿Qué hicimos?**
+
+La FASE 9 es la más extensa de todo el proyecto hasta ahora. Conecta tres capas distintas en un único sprint:
+
+1. **Capa HTTP**: los controllers REST completos con todos los endpoints de facturas, un filtro global de errores de dominio, y un pipe de validación Zod reutilizable.
+2. **Capa de aplicación**: los use cases de aprobación y rechazo se refactorizan para publicar domain events.
+3. **Capa de eventos**: implementamos el patrón Outbox (garantía de entrega de eventos aunque la app se caiga) y los handlers no-op preparados para las notificaciones de FASE 11.
+
+Al cerrar esta fase, la API REST es completamente funcional: se pueden subir facturas, listarlas, verlas en detalle, aprobarlas, rechazarlas, y consultar el historial de estados. Todo protegido con JWT y RBAC.
+
+---
+
+#### Bloque 1 — `DomainErrorFilter`: convertir errores de dominio en respuestas HTTP correctas
+
+**El problema que resuelve:**
+
+Los use cases devuelven `Result<T, DomainError>`. Los controllers hacen `throw result.error` cuando hay un error. Sin nada más, NestJS no sabe qué hacer con un `DomainError` (no es una `HttpException`) y lo convierte en un 500 genérico. Pero `InvoiceNotFoundError` debería ser un 404, `InvalidStateTransitionError` debería ser un 409, etc.
+
+El `DomainErrorFilter` es un **ExceptionFilter global** que intercepta **todas** las excepciones que llegan al HTTP layer y las convierte al código HTTP correcto.
+
+**¿Qué es un ExceptionFilter?**
+
+En NestJS, el flujo de una petición HTTP es:
+
+```
+Request → Middleware → Guard → Pipe → Handler → Interceptor → Response
+                                          ↓ (si falla)
+                                    ExceptionFilter → Response de error
+```
+
+Un `ExceptionFilter` captura cualquier excepción que ocurra en ese flujo y tiene control total sobre la respuesta de error que se devuelve al cliente.
+
+```typescript
+// packages/backend/src/interface/http/filters/domain-error.filter.ts
+
+const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
+  // 404 — recurso no encontrado
+  INVOICE_NOT_FOUND:    404,
+  PROVIDER_NOT_FOUND:   404,
+  USER_NOT_FOUND:       404,
+
+  // 401 — no autenticado
+  INVALID_CREDENTIALS:  401,
+
+  // 403 — autenticado pero sin permiso
+  UNAUTHORIZED:         403,
+
+  // 409 — conflicto de estado
+  INVALID_STATE_TRANSITION:    409,
+  INVOICE_ALREADY_PROCESSING:  409,
+  PROVIDER_ALREADY_EXISTS:     409,
+  USER_ALREADY_EXISTS:         409,
+
+  // 422 — datos semánticamente inválidos (reglas de negocio)
+  INVALID_FIELD:              422,
+  VALIDATION_FAILED:          422,
+  INVALID_INVOICE_AMOUNT:     422,
+  INVALID_INVOICE_STATUS:     422,
+  INVALID_INVOICE_DATE:       422,
+  INVALID_TAX_ID:             422,
+  INVALID_PROVIDER_NAME:      422,
+};
+
+@Catch()  // sin argumentos → captura TODAS las excepciones
+export class DomainErrorFilter implements ExceptionFilter {
+  private readonly logger = new Logger(DomainErrorFilter.name);
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const res = ctx.getResponse<Response>();
+
+    // ── Camino 1: HttpException de NestJS (BadRequestException, ForbiddenException, etc.)
+    // Estas ya tienen el código HTTP correcto — las pasamos sin modificar
+    if (exception instanceof HttpException) {
+      const status = exception.getStatus();
+      const body = exception.getResponse();
+      res.status(status).json(body);
+      return;
+    }
+
+    // ── Camino 2: DomainError — mapear el código al HTTP status correcto
+    if (exception instanceof DomainError) {
+      const status = DOMAIN_ERROR_STATUS_MAP[exception.code] ?? 500;
+
+      if (status >= 500) {
+        this.logger.error(`Unhandled DomainError [${exception.code}]: ${exception.message}`);
+      }
+
+      res.status(status).json({
+        error: {
+          code: exception.code,
+          message: exception.message,
+        },
+      });
+      return;
+    }
+
+    // ── Camino 3: Error completamente inesperado → 500 genérico
+    // El mensaje real se loguea en el servidor pero NO se expone al cliente
+    const errMessage = exception instanceof Error ? exception.message : String(exception);
+    this.logger.error(`Unhandled exception: ${errMessage}`);
+
+    res.status(500).json({
+      error: {
+        code: 'INTERNAL_SERVER_ERROR',
+        message: 'An unexpected error occurred',
+      },
+    });
+  }
+}
+```
+
+**Los tres caminos del filtro explicados:**
+
+- **Camino 1 (HttpException)**: cuando un Guard lanza `ForbiddenException`, o un Pipe lanza `BadRequestException`, o el controller lanza `UnauthorizedException` manualmente — estas ya son excepciones de NestJS con el código HTTP correcto. El filtro las respeta y las deja pasar sin modificar.
+
+- **Camino 2 (DomainError)**: cuando el controller hace `throw result.error` y ese error es un `InvoiceNotFoundError`, el filtro busca `'INVOICE_NOT_FOUND'` en el mapa y devuelve un 404 con `{ error: { code: 'INVOICE_NOT_FOUND', message: '...' } }`.
+
+- **Camino 3 (cualquier otra cosa)**: un error de base de datos inesperado, un null pointer, lo que sea. El mensaje real se loguea en el servidor (para que el desarrollador pueda investigar) pero el cliente solo recibe `'An unexpected error occurred'` — nunca se expone el stack trace ni información interna.
+
+**Registro en `main.ts`:**
+
+```typescript
+app.useGlobalFilters(new DomainErrorFilter());
+```
+
+`useGlobalFilters` registra el filtro globalmente — intercepta excepciones de toda la aplicación.
+
+---
+
+#### Bloque 1b — `main.ts`: seguridad HTTP en el arranque
+
+`main.ts` es el punto de entrada de la aplicación. En FASE 9 añadimos tres configuraciones de seguridad:
+
+```typescript
+// packages/backend/src/main.ts
+
+async function bootstrap() {
+  validateConfig();  // falla rápido si faltan variables de entorno
+  const app = await NestFactory.create(AppModule);
+
+  // ── 1. Helmet: cabeceras de seguridad HTTP ───────────────────────────
+  app.use(helmet());
+
+  // ── 2. CORS: solo permite peticiones del frontend configurado ────────
+  app.enableCors({
+    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    credentials: true,                            // permite enviar cookies
+    methods: ['GET', 'POST', 'PATCH', 'DELETE'],  // métodos permitidos
+  });
+
+  // ── 3. Cookie parser: necesario para leer la cookie del refreshToken ─
+  app.use(cookieParser());
+
+  // ── 4. Filtro global de errores de dominio ───────────────────────────
+  app.useGlobalFilters(new DomainErrorFilter());
+
+  await app.listen(process.env.PORT ?? 3000);
+}
+```
+
+**¿Qué hace `helmet()`?**
+
+Helmet es un middleware que añade automáticamente ~15 cabeceras de seguridad HTTP. Algunas de las más importantes:
+
+| Cabecera | Protección |
+|---|---|
+| `Content-Security-Policy` | Indica al navegador de dónde puede cargar recursos; mitiga XSS |
+| `Strict-Transport-Security` | Fuerza HTTPS; el navegador no intentará HTTP |
+| `X-Content-Type-Options: nosniff` | El navegador no "adivina" el tipo MIME de un recurso |
+| `X-Frame-Options: SAMEORIGIN` | Previene clickjacking (la página no puede cargarse en un iframe externo) |
+
+Una sola línea `app.use(helmet())` activa todo esto.
+
+**¿Por qué CORS con `credentials: true`?**
+
+Sin `credentials: true`, el navegador no enviará cookies en peticiones cross-origin. Y el refresh token vive en una cookie. Sin esta configuración, el logout (y el refresh) no funcionarían desde el frontend.
+
+---
+
+#### Bloque 1c — `ZodValidationPipe`: validación reutilizable con Zod
+
+```typescript
+// packages/backend/src/interface/http/pipes/zod-validation.pipe.ts
+
+@Injectable()
+export class ZodValidationPipe implements PipeTransform {
+  constructor(private readonly schema: ZodSchema) {}
+
+  transform(value: unknown) {
+    const result = this.schema.safeParse(value);
+    if (!result.success) {
+      throw new BadRequestException({
+        error: {
+          code: 'VALIDATION_ERROR',
+          message: 'Request body validation failed',
+          details: result.error.flatten().fieldErrors,
+        },
+      });
+    }
+    return result.data;
+  }
+}
+```
+
+Este pipe es **genérico**: recibe cualquier `ZodSchema` en el constructor y valida el valor que pasa por él. Se usa así:
+
+```typescript
+// En el body de una petición JSON:
+@Body(new ZodValidationPipe(LoginInputSchema)) body: LoginInput
+
+// En los query params:
+@Query(new ZodValidationPipe(ListInvoicesQuerySchema)) query: ListInvoicesQuery
+
+// En el body de un PATCH:
+@Body(new ZodValidationPipe(RejectBodySchema)) body: RejectBody
+```
+
+Si la validación falla, NestJS lanza un `400 Bad Request` con los errores campo a campo:
+
+```json
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Request body validation failed",
+    "details": {
+      "reason": ["reason is required"]
+    }
+  }
+}
+```
+
+---
+
+#### Bloque 2 — `GET /invoices` y `GET /invoices/:id`: listado y detalle
+
+**El problema de los query params como strings:**
+
+Los query params de HTTP siempre llegan como strings, incluso si el valor es un número. Si el usuario pide `GET /invoices?page=2&limit=20`, el servidor recibe `{ page: "2", limit: "20" }` — strings, no números.
+
+El schema de la capa de aplicación (`ListInvoicesInput`) usa `z.number()`. Si pasásemos directamente `"2"` a un campo `z.number()`, Zod lo rechazaría porque `"2"` es un string, no un número.
+
+Por eso en el controller definimos un schema específico para la capa HTTP con `z.coerce.number()`:
+
+```typescript
+// Solo en el controller — este schema no existe en la capa de aplicación
+const ListInvoicesQuerySchema = z.object({
+  status: z.string().optional(),
+  page:   z.coerce.number().int().min(1).default(1),    // "2" → 2
+  limit:  z.coerce.number().int().min(1).max(100).default(20),
+  sort:   z.string().optional(),
+});
+```
+
+`z.coerce.number()` convierte automáticamente `"20"` al número `20` antes de validar. Esto es específico de HTTP — no contamina los DTOs de la capa de aplicación que trabajan con tipos ya parseados.
+
+**RBAC en el listado:**
+
+```typescript
+@Get()
+@Roles('uploader', 'validator', 'approver', 'admin')
+async list(
+  @CurrentUser() user: AuthenticatedUser,
+  @Query(new ZodValidationPipe(ListInvoicesQuerySchema)) query: ListInvoicesQuery,
+) {
+  const result = await this.listInvoicesUseCase.execute({
+    requesterId: user.userId,
+    requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    status: query.status,
+    page: query.page,
+    limit: query.limit,
+    sort: query.sort,
+  });
+  // ...
+  return { data: items, meta: { total, page, limit } };
+}
+```
+
+El controller pasa `requesterId` y `requesterRole` al use case. La decisión de qué facturas devolver vive en el use case, no en el controller:
+
+- Si `requesterRole === 'uploader'` → `invoiceRepo.findByUploaderId(requesterId, filters)` (solo las suyas)
+- Si rol superior → `invoiceRepo.findAll(filters)` (todas)
+
+Esta lógica está en el use case, no en el controller, porque es **lógica de negocio** (quién puede ver qué) y no lógica de HTTP.
+
+**Registro global del `RolesGuard` en `AppModule`:**
+
+```typescript
+// packages/backend/src/app.module.ts
+providers: [
+  AppService,
+  {
+    provide: APP_GUARD,
+    useClass: RolesGuard,
+  },
+],
+```
+
+Con `APP_GUARD`, el `RolesGuard` se ejecuta en **cada petición** de toda la aplicación sin excepciones. Los endpoints sin `@Roles()` permiten el paso de cualquier usuario autenticado (el guard devuelve `true` cuando no hay metadatos de roles).
+
+---
+
+#### Bloque 3a — Domain events y el patrón Outbox: ¿por qué y cómo?
+
+**El problema que necesitábamos resolver:**
+
+Cuando se aprueba una factura, deben ocurrir dos cosas:
+1. El estado de la factura cambia a `APPROVED` en la base de datos.
+2. Se envía una notificación (email, webhook, lo que sea).
+
+La implementación naive sería:
+
+```typescript
+// ❌ Incorrecto — acoplado y sin garantías
+await invoiceRepo.save(invoice);           // 1. guardar
+await notifier.sendEmail(invoice.getId()); // 2. notificar
+```
+
+Problema: si la aplicación se cae entre el paso 1 y el paso 2, la factura queda aprobada en la base de datos pero la notificación nunca se envía. No hay forma de saberlo ni de recuperarse automáticamente.
+
+**¿Qué es el patrón Outbox?**
+
+El patrón Outbox (o Transactional Outbox) resuelve este problema guardando el evento en la misma base de datos que el estado, de forma que sobrevive a fallos de la aplicación:
+
+```
+ANTES (sin Outbox):
+1. invoiceRepo.save(invoice)     ← éxito
+2. app.crash() 💥
+3. notifier.sendEmail()          ← nunca se ejecuta → notificación perdida
+
+DESPUÉS (con Outbox):
+1. invoiceRepo.save(invoice)     ← éxito
+2. outboxRepo.save(event)        ← éxito (guardado en la misma DB)
+3. app.crash() 💥                ← el evento sobrevive en la DB
+4. [app se reinicia, 10s después]
+5. OutboxPollerWorker lee el evento con processed=false
+6. Publica el evento en EventEmitter2
+7. El handler lo procesa (en FASE 11: envía el email)
+8. outboxRepo.markProcessed(event.id)
+```
+
+El evento es duradero porque está en la base de datos, no en memoria. Aunque la app se caiga mil veces, el evento se procesará eventualmente.
+
+**¿Por qué "at-least-once delivery" y no "exactly-once"?**
+
+"At-least-once" significa que el evento se procesará al menos una vez — podría procesarse más de una vez si el poller falla entre `emitAsync` y `markProcessed`. Por eso los handlers deben ser **idempotentes**: procesar el mismo evento dos veces debe tener el mismo resultado que procesarlo una vez. En FASE 11, el handler de email verificará si ya se envió el email para ese evento antes de enviarlo de nuevo.
+
+---
+
+#### Bloque 3a (cont.) — Implementación: domain events, `EventBusPort`, `OutboxEventBusAdapter`
+
+**Las clases de domain events:**
+
+```typescript
+// packages/backend/src/domain/events/domain-event.base.ts
+export abstract class DomainEventBase {
+  readonly occurredAt: Date;
+
+  constructor(
+    readonly eventType: string,
+    readonly payload: unknown,
+  ) {
+    this.occurredAt = new Date();
+  }
+}
+```
+
+```typescript
+// packages/backend/src/domain/events/invoice-approved.event.ts
+export interface InvoiceApprovedPayload {
+  invoiceId: string;
+  approverId: string;
+  status: string;
+}
+
+export class InvoiceApprovedEvent extends DomainEventBase {
+  declare readonly payload: InvoiceApprovedPayload;
+
+  constructor(payload: InvoiceApprovedPayload) {
+    super('invoice.approved', payload);
+  }
+}
+```
+
+`declare readonly payload: InvoiceApprovedPayload` es una forma de TypeScript de "especializar" el tipo del campo `payload` heredado (que en la base es `unknown`) sin redeclararlo en JavaScript. No genera ningún código JavaScript — es solo una anotación de tipo.
+
+**`EventBusPort`: la interfaz que usan los use cases:**
+
+```typescript
+// packages/backend/src/application/ports/event-bus.port.ts
+export interface EventBusPort {
+  publish(event: DomainEventBase): Promise<void>;
+}
+
+export const EVENT_BUS_TOKEN = 'EVENT_BUS_TOKEN';
+```
+
+Los use cases dependen de esta interfaz. No saben si el evento se guarda en una base de datos, se envía a Kafka, o se descarta. Esto aplica la **D de SOLID**: dependemos de la abstracción, no de la implementación.
+
+**`OutboxEventBusAdapter`: la implementación que persiste en la DB:**
+
+```typescript
+// packages/backend/src/infrastructure/events/outbox-event-bus.adapter.ts
+@Injectable()
+export class OutboxEventBusAdapter implements EventBusPort {
+  private readonly logger = new Logger(OutboxEventBusAdapter.name);
+
+  constructor(
+    @Inject(OUTBOX_EVENT_REPOSITORY)
+    private readonly outboxRepo: OutboxEventRepository,
+  ) {}
+
+  async publish(event: DomainEventBase): Promise<void> {
+    // NO publicamos en EventEmitter2 aquí.
+    // Solo guardamos en la tabla outbox_events.
+    // El OutboxPollerWorker lo publicará en EventEmitter2.
+    await this.outboxRepo.save(event);
+    this.logger.log(`Outbox event queued: ${event.eventType}`);
+  }
+}
+```
+
+La clave: `publish()` no envía el evento — lo guarda. La publicación real ocurre en el `OutboxPollerWorker` (Bloque 3b).
+
+**La migración de `outbox_events`:**
+
+```sql
+-- packages/backend/src/infrastructure/db/migrations/1741650007000-CreateOutboxEventsTable.ts
+
+CREATE TABLE outbox_events (
+  id            UUID         NOT NULL,
+  event_type    VARCHAR(100) NOT NULL,
+  payload       JSONB        NOT NULL,      -- el evento completo serializado
+  processed     BOOLEAN      NOT NULL DEFAULT false,
+  created_at    TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  processed_at  TIMESTAMPTZ  NULL,
+  CONSTRAINT pk_outbox_events PRIMARY KEY (id)
+);
+
+-- Índice parcial: SOLO indexa las filas donde processed = false.
+-- Cuando un evento se marca como processed = true, desaparece del índice.
+-- Esto hace que el índice sea pequeño y eficiente incluso con millones de eventos históricos.
+CREATE INDEX idx_outbox_events_unprocessed
+  ON outbox_events (created_at ASC)
+  WHERE processed = false;
+```
+
+**¿Por qué un índice parcial?**
+
+Sin el índice parcial, si la tabla tiene 1 millón de eventos históricos (todos con `processed = true`) y 5 pendientes (con `processed = false`), una query `WHERE processed = false` tendría que escanear el millón de filas para encontrar las 5. Con el índice parcial, el índice solo contiene las 5 filas pendientes — la query es instantánea.
+
+**`ApproveInvoiceUseCase` y `RejectInvoiceUseCase` refactorizados:**
+
+Antes de FASE 9, estos use cases tenían `NotificationPort` como dependencia y llamaban al notificador directamente. Ahora usan `EventBusPort` para publicar eventos y delegan la notificación al handler de eventos:
+
+```typescript
+// packages/backend/src/application/use-cases/approve-invoice.use-case.ts
+export class ApproveInvoiceUseCase {
+  constructor(
+    private readonly invoiceRepo: InvoiceRepository,
+    private readonly auditor: AuditPort,
+    private readonly eventBus: EventBusPort,   // ← nuevo (reemplaza NotificationPort)
+  ) {}
+
+  async execute(input: ApproveInvoiceInput) {
+    const invoice = await this.invoiceRepo.findById(input.invoiceId);
+    if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
+
+    const approveResult = invoice.approve(input.approverId);
+    if (approveResult.isErr()) return err(approveResult.error);
+
+    await this.invoiceRepo.save(invoice);    // 1. guardar el nuevo estado
+
+    await this.auditor.record({             // 2. registrar auditoría
+      action: 'approve',
+      resourceId: invoice.getId(),
+      userId: input.approverId,
+    });
+
+    await this.eventBus.publish(            // 3. guardar evento en outbox_events
+      new InvoiceApprovedEvent({
+        invoiceId: invoice.getId(),
+        approverId: input.approverId,
+        status: invoice.getStatus().getValue(),
+      }),
+    );
+
+    return ok({
+      invoiceId: invoice.getId(),
+      status: invoice.getStatus().getValue(),
+      approverId: input.approverId,
+    });
+  }
+}
+```
+
+**¿Por qué eliminar `NotificationPort` de los use cases?**
+
+Porque los use cases no deberían saber nada sobre notificaciones. Su responsabilidad es aprobar la factura. La consecuencia de esa aprobación (enviar un email) es responsabilidad de otro componente (el handler de eventos). Esto aplica el **Principio de Responsabilidad Única**: cada clase hace una sola cosa.
+
+---
+
+#### Bloque 3b — `OutboxPollerWorker`: el corazón del patrón Outbox
+
+```typescript
+// packages/backend/src/interface/jobs/outbox-poller.worker.ts
+
+@Processor(OUTBOX_POLLER_QUEUE)
+@Injectable()
+export class OutboxPollerWorker extends WorkerHost implements OnModuleInit {
+  private readonly logger = new Logger(OutboxPollerWorker.name);
+
+  constructor(
+    @Inject(OUTBOX_EVENT_REPOSITORY)
+    private readonly outboxRepo: OutboxEventRepository,
+    @InjectQueue(OUTBOX_POLLER_QUEUE)
+    private readonly pollerQueue: Queue,
+    private readonly eventEmitter: EventEmitter2,
+  ) {
+    super();
+  }
+
+  // Se ejecuta una vez cuando NestJS inicializa el módulo
+  async onModuleInit(): Promise<void> {
+    await this.pollerQueue.add(
+      'poll',
+      {},
+      {
+        repeat: { every: 10_000 },           // ejecutar cada 10 segundos
+        jobId: 'outbox-poller-repeatable',   // ID fijo para deduplicación
+      },
+    );
+    this.logger.log('OutboxPollerWorker: repeatable job registrado (cada 10s)');
+  }
+
+  // BullMQ llama a este método cada 10 segundos
+  async process(_job: Job): Promise<void> {
+    const events = await this.outboxRepo.findUnprocessed();
+
+    if (events.length === 0) return; // nada que procesar
+
+    this.logger.log(`OutboxPollerWorker: procesando ${events.length} evento(s)`);
+
+    for (const event of events) {
+      try {
+        // Emite el evento en el EventEmitter2 in-process
+        // Los handlers (@OnEvent) reciben el evento aquí
+        await this.eventEmitter.emitAsync(event.eventType, event);
+
+        // Solo marca como procesado si el handler no lanzó error
+        await this.outboxRepo.markProcessed(event.id);
+
+        this.logger.log(`OutboxPollerWorker: evento procesado`, {
+          id: event.id,
+          eventType: event.eventType,
+        });
+      } catch (err) {
+        // Si el handler falla, logueamos y continuamos con el siguiente evento.
+        // El evento fallido queda con processed = false.
+        // El siguiente ciclo de 10s lo reintentará automáticamente.
+        this.logger.error(
+          `OutboxPollerWorker: error procesando evento ${event.id}`,
+          { eventType: event.eventType, error: err instanceof Error ? err.message : String(err) },
+        );
+      }
+    }
+  }
+}
+```
+
+**¿Por qué `onModuleInit` en lugar de registrar el job en el módulo?**
+
+El Repeatable Job de BullMQ necesita la cola activa para registrarse. La cola está disponible cuando el módulo ya está inicializado. `onModuleInit` se ejecuta justo después de que NestJS inicializa el módulo — es el momento correcto.
+
+El `jobId: 'outbox-poller-repeatable'` garantiza que aunque el servidor se reinicie muchas veces, BullMQ solo mantiene una instancia del job repetible (deduplicación por ID). Sin el `jobId`, cada arranque del servidor añadiría una nueva instancia del job, y pronto habría decenas de pollers corriendo en paralelo.
+
+**¿Por qué el try/catch está dentro del bucle, no fuera?**
+
+Si el try/catch estuviese fuera del bucle:
+
+```typescript
+// ❌ Si el segundo evento falla, el tercero, cuarto... nunca se procesan
+try {
+  for (const event of events) {
+    await this.eventEmitter.emitAsync(event.eventType, event);
+    await this.outboxRepo.markProcessed(event.id);
+  }
+} catch (err) {
+  // solo logueamos y el ciclo termina aquí
+}
+```
+
+Con el try/catch dentro del bucle, si el segundo evento falla, el poller sigue con el tercero, cuarto, etc. El evento fallido se reintentará en el siguiente ciclo de 10s.
+
+**`EventEmitter2` y `emitAsync`:**
+
+`emitAsync` es como `emit` pero espera a que todas las promesas de los handlers se resuelvan antes de continuar. Sin `async`, si un handler lanzase una excepción dentro de una promesa, el error quedaría sin capturar y el poller no sabría que falló.
+
+**`EventEmitterModule` en `AppModule`:**
+
+```typescript
+// packages/backend/src/app.module.ts
+EventEmitterModule.forRoot(),
+```
+
+Este módulo es el sistema de mensajería in-process. Los eventos no salen de la aplicación — viajan dentro del mismo proceso de Node.js desde el poller hasta los handlers. Es ligero y suficiente para FASE 9 y FASE 11.
+
+**Handlers no-op (preparados para FASE 11):**
+
+```typescript
+// packages/backend/src/infrastructure/events/handlers/invoice-approved.handler.ts
+
+@Injectable()
+export class InvoiceApprovedHandler {
+  private readonly logger = new Logger(InvoiceApprovedHandler.name);
+
+  @OnEvent('invoice.approved', { async: true })
+  async handle(event: InvoiceApprovedEvent): Promise<void> {
+    // FASE 9: solo logueamos — no hacemos nada
+    this.logger.log('invoice.approved recibido (no-op)', {
+      invoiceId: event.payload.invoiceId,
+      approverId: event.payload.approverId,
+      status: event.payload.status,
+    });
+    // FASE 11: this.notifier.notifyStatusChange(...) → email real
+  }
+}
+```
+
+`{ async: true }` en `@OnEvent` es crucial: hace que EventEmitter2 espere a que la promesa del handler se resuelva (o rechace) antes de continuar. Sin `async: true`, el error de un handler async no podría ser capturado por el try/catch del poller.
+
+El `InvoiceRejectedHandler` es idéntico pero escucha `'invoice.rejected'` y loguea también el campo `reason`.
+
+**Por qué "no-op" ahora y no el email real:**
+
+En FASE 11, cambiar el comportamiento del handler no requiere tocar ni los use cases ni los controllers — solo el handler. Esto es el **Principio Open/Closed**: el sistema está abierto a extensión (añadir el email en el handler) pero cerrado a modificación (los use cases no cambian).
+
+---
+
+#### Bloque 4 — `GET /invoices/:id/events`: historial de transiciones
+
+```typescript
+// packages/backend/src/application/use-cases/get-invoice-events.use-case.ts
+
+export class GetInvoiceEventsUseCase {
+  constructor(
+    private readonly invoiceRepo: InvoiceRepository,
+    private readonly invoiceEventRepo: InvoiceEventRepository,
+  ) {}
+
+  async execute(input: GetInvoiceEventsInput) {
+    // 1. Verificar que la factura existe
+    const invoice = await this.invoiceRepo.findById(input.invoiceId);
+    if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
+
+    // 2. RBAC: uploaders solo pueden ver eventos de sus propias facturas
+    const hasFullAccess = ROLES_WITH_FULL_ACCESS.includes(input.requesterRole);
+    const isOwner = invoice.getUploaderId() === input.requesterId;
+
+    if (!hasFullAccess && !isOwner) {
+      return err(new UnauthorizedError('access invoice events'));
+    }
+
+    // 3. Obtener el historial completo (ordenado cronológicamente)
+    const events = await this.invoiceEventRepo.findByInvoiceId(input.invoiceId);
+
+    return ok(
+      events.map(event => ({
+        id: event.getId(),
+        invoiceId: event.getInvoiceId(),
+        from: event.getFrom(),
+        to: event.getTo(),
+        userId: event.getUserId(),
+        timestamp: event.getTimestamp(),
+      })),
+    );
+  }
+}
+```
+
+Respuesta de ejemplo para una factura aprobada:
+
+```json
+{
+  "data": [
+    { "from": "pending",             "to": "processing",        "userId": "user-123", "timestamp": "2025-03-10T10:00:00Z" },
+    { "from": "processing",          "to": "extracted",         "userId": "system",   "timestamp": "2025-03-10T10:00:15Z" },
+    { "from": "extracted",           "to": "ready_for_approval","userId": "system",   "timestamp": "2025-03-10T10:00:15Z" },
+    { "from": "ready_for_approval",  "to": "approved",          "userId": "user-456", "timestamp": "2025-03-10T11:30:00Z" }
+  ]
+}
+```
+
+Este historial es inmutable — una vez registrado, ningún event puede modificarse. La tabla `invoice_events` no tiene operación de update ni delete en el repositorio.
+
+---
+
+#### Bloque 5 — `PATCH approve/reject` + `providerId` desde el body del upload
+
+**`PATCH /invoices/:id/approve` y `PATCH /invoices/:id/reject`:**
+
+```typescript
+// packages/backend/src/interface/http/controllers/invoices.controller.ts
+
+const RejectBodySchema = z.object({
+  reason: z.string().min(1, 'reason is required'),
+});
+
+@Patch(':id/approve')
+@Roles('approver', 'admin')   // solo approver y admin pueden aprobar
+@HttpCode(HttpStatus.OK)
+async approve(
+  @CurrentUser() user: AuthenticatedUser,
+  @Param('id') invoiceId: string,
+) {
+  const result = await this.approveInvoiceUseCase.execute({
+    invoiceId,
+    approverId: user.userId,  // el approverId viene del JWT, nunca del body
+  });
+
+  if (result.isErr()) throw result.error;
+
+  return { data: result.value };
+}
+
+@Patch(':id/reject')
+@Roles('approver', 'admin')
+@HttpCode(HttpStatus.OK)
+async reject(
+  @CurrentUser() user: AuthenticatedUser,
+  @Param('id') invoiceId: string,
+  @Body(new ZodValidationPipe(RejectBodySchema)) body: RejectBody,
+) {
+  const result = await this.rejectInvoiceUseCase.execute({
+    invoiceId,
+    approverId: user.userId,
+    reason: body.reason,
+  });
+
+  if (result.isErr()) throw result.error;
+
+  return { data: result.value };
+}
+```
+
+El `approverId` **siempre** viene del JWT verificado, nunca del body de la petición. Si viniese del body, cualquiera podría hacer una aprobación en nombre de otro usuario simplemente enviando `{ "approverId": "otro-user-id" }`.
+
+**`providerId` desde el body del upload multipart:**
+
+Hasta FASE 8, el `providerId` en el upload estaba hardcodeado en el controller. En FASE 9 lo leemos del body de la petición multipart:
+
+```typescript
+const UploadBodySchema = z.object({
+  providerId: z.string().uuid({ message: 'providerId must be a valid UUID' }),
+});
+
+@Post('upload')
+@Roles('uploader', 'validator', 'approver', 'admin')
+@UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+async upload(
+  @CurrentUser() user: AuthenticatedUser,
+  @UploadedFile(new FileValidationPipe()) file: Express.Multer.File,
+  @Body() body: UploadBody,
+) {
+  // Validación manual en lugar de ZodValidationPipe como decorador de parámetro
+  const parsed = UploadBodySchema.safeParse(body);
+  if (!parsed.success) {
+    throw new BadRequestException(
+      parsed.error.flatten().fieldErrors.providerId?.join(', ')
+      ?? 'providerId must be a valid UUID'
+    );
+  }
+
+  const result = await this.uploadInvoiceUseCase.execute({
+    uploaderId: user.userId,
+    providerId: parsed.data.providerId,
+    fileBuffer: file.buffer,
+    mimeType: file.mimetype as 'application/pdf',
+    fileSizeBytes: file.size,
+  });
+
+  if (result.isErr()) throw result.error;
+
+  return { data: result.value };
+}
+```
+
+**¿Por qué `safeParse` manual en lugar de `ZodValidationPipe` como decorador de `@Body()`?**
+
+En requests `multipart/form-data`, Multer parsea los campos de texto y los escribe en el body antes de que NestJS ejecute los pipes de parámetro. El objeto `body` que llega tiene `Object.getPrototypeOf(body) === null` — es un objeto con prototipo nulo (sin métodos de `Object.prototype`). Algunos métodos de Zod y NestJS dan por asumido que el objeto tiene el prototipo estándar.
+
+El `UploadBodySchema.safeParse(body)` funciona correctamente con objetos null-prototype — Zod accede a las propiedades directamente sin asumir el prototipo. Por eso usamos `safeParse` directamente en el cuerpo del método, en lugar de `@Body(new ZodValidationPipe(UploadBodySchema))`.
+
+---
+
+#### Problemas encontrados en FASE 9 y cómo se resolvieron
+
+**1. Zod v4 rechaza UUIDs con nibble de versión 0**
+
+Zod v4 aplica la especificación RFC 4122 estrictamente. Un UUID RFC 4122 válido tiene el nibble de versión (carácter en la posición 14) en el rango `1-5`. Los UUIDs de la forma `00000000-0000-0000-0000-000000000002` tienen el nibble en `0`, lo cual **técnicamente** no es un UUID RFC 4122 válido aunque se parezca a uno.
+
+Los tests de upload usaban `VALID_PROVIDER_ID = '00000000-0000-0000-0000-000000000002'` como ID de prueba. Con Zod v4 y el schema `UploadBodySchema` que valida `providerId` como UUID, estos tests empezaron a fallar con error de validación aunque el resto del código funcionase correctamente.
+
+Solución: cambiar a un UUID con nibble de versión válido en todos los tests: `'a1b2c3d4-e5f6-4789-abcd-ef0123456789'`.
+
+Lección: cuando actualizas una librería de validación, revisa si la nueva versión es más estricta en los estándares. Lo que pasaba en v3 puede fallar en v4.
+
+**2. `InvoiceEventTypeOrmRepository` necesitaba `InvoiceEventOrmEntity` registrada en TypeORM**
+
+Al añadir el `GetInvoiceEventsUseCase`, necesitamos `InvoiceEventRepository` implementado. La implementación TypeORM usa `InvoiceEventOrmEntity`, que debe estar en la lista de `entities` del `DataSource`. Si no está, TypeORM lanza `EntityMetadataNotFoundError`.
+
+Solución: añadir `InvoiceEventOrmEntity` al array de entities en `database.module.ts` y en `data-source.ts`.
+
+**3. `OutboxPollerWorker` vs `ProcessInvoiceWorker`: ambos en `JobsModule`**
+
+El `OutboxPollerWorker` necesita `OUTBOX_EVENT_REPOSITORY` inyectado. Este token se provee en `InvoicesModule` (donde están todos los repositorios). `JobsModule` importa `InvoicesModule`, por lo que el token está disponible. Sin embargo, el orden de declaración en los providers de `JobsModule` importa: el worker debe declararse después de que los tokens que inyecta estén registrados.
+
+Solución: verificar que `InvoicesModule` está en los `imports` de `JobsModule` y que los providers del worker están después de los imports.
+
+**4. `EventEmitterModule` no estaba en `AppModule`**
+
+Los handlers `InvoiceApprovedHandler` y `InvoiceRejectedHandler` usan `@OnEvent()`. Este decorador requiere que `EventEmitterModule` esté importado en el módulo raíz. Sin él, NestJS arranca sin error pero los handlers nunca reciben eventos — no hay ningún aviso de que algo falta.
+
+Solución: `EventEmitterModule.forRoot()` en los imports de `AppModule`.
+
+---
+
+#### Decisiones de diseño registradas (FASE 9)
+
+| Decisión | Elección | Motivo |
+|---|---|---|
+| Patrón Outbox | T2: dos saves separados | Suficiente por ahora. T1 (atómico en la misma transacción) en FASE 13 con Unit of Work |
+| Worker Outbox | BullMQ Repeatable Job | Ya existe BullMQ en el stack; visible en Bull Board; reintentos automáticos |
+| EventBus in-process | `@nestjs/event-emitter` (EventEmitter2) | Sin nueva infraestructura; suficiente para notificaciones fire-and-forget |
+| Frecuencia poller | 10 segundos | Balance entre latencia de notificación y carga sobre PostgreSQL |
+| Índice Outbox | Parcial (`WHERE processed = false`) | El índice no crece con el historial; O(1) en lugar de O(n) |
+| `NotificationPort` en use cases | Eliminado | Use cases publican eventos; handlers gestionan consecuencias; SRP cumplido |
+| Handlers en FASE 9 | No-op (Logger) | FASE 11 implementa el handler real sin tocar use cases ni controllers |
+| `approverId` en el body | Nunca — viene del JWT | Previene suplantación de identidad en aprobaciones |
+| `providerId` desde multipart | `safeParse` manual | Objetos null-prototype de Multer no son compatibles con `ZodValidationPipe` como decorador |
+
+---
+
+**Resumen de tests al cerrar FASE 9:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 24 | 140 |
+| Unit (controllers + guards + pipes + filters) | 5 | 50 |
+| Unit (OCR + LLM + queue + workers) | 5 | 22 |
+| Integration (repositorios reales) | 4 | 36 |
+| NestJS base | 1 | 1 |
+| **Total** | **38** | **261** |
+
+**Commit de cierre:**
+```
+feat(api): HTTP controllers, EventBus, Outbox pattern (FASE 9)
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*

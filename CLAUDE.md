@@ -287,10 +287,11 @@ InvoiceEvent     // historial de estados
 Domain Events
 typescript
 // domain/events/
+// Clase base: DomainEventBase { eventType, occurredAt, payload }
 InvoiceUploadedEvent
 InvoiceProcessedEvent
-InvoiceApprovedEvent
-InvoiceRejectedEvent
+InvoiceApprovedEvent   // payload: { invoiceId, approverId, status, occurredAt }
+InvoiceRejectedEvent   // payload: { invoiceId, approverId, reason, status, occurredAt }
 
 📦 Casos de uso (uno por acción)
 text
@@ -311,7 +312,7 @@ typescript
 export class ApproveInvoiceUseCase {
   constructor(
     private invoiceRepo: InvoiceRepository,
-    private notifier: NotificationPort,
+    private eventBus: EventBusPort,
     private auditor: AuditPort,
   ) {}
 
@@ -323,8 +324,8 @@ export class ApproveInvoiceUseCase {
     if (result.isErr()) return result;
 
     await this.invoiceRepo.save(invoice);
-    await this.auditor.record({ action: 'approve', resourceId: invoice.id, userId: input.approverId });
-    await this.notifier.notify(new InvoiceApprovedEvent(invoice));
+    await this.eventBus.publish(new InvoiceApprovedEvent({ invoiceId: invoice.getId(), approverId: input.approverId, status: invoice.getStatus().getValue() }));
+    await this.auditor.record({ action: 'approve', resourceId: invoice.getId(), userId: input.approverId });
 
     return Ok(invoice);
   }
@@ -380,7 +381,8 @@ export class AdapterFactory {
 Colas disponibles
 text
 process-invoice    ← OCR + extracción + validación
-send-notification  ← emails async
+outbox-poller      ← drena outbox_events y publica domain events (repeatable, cada 10s)
+send-notification  ← emails async (FASE 11)
 export-invoices    ← generación CSV/JSON async
 
 Configuración obligatoria
@@ -397,7 +399,90 @@ const queue = new Queue('process-invoice', {
 Workers: idempotencia
 Cada worker debe ser idempotente (procesar dos veces da mismo resultado).
 Guardar jobId en DB para detectar duplicados.
-DLQ: jobs fallidos tras 3 reintentos van a cola failed-jobs.
+DLQ: jobs fallidos tras 3 reintentos van a cola failed-jobs.
+
+## 📬 Patrón Outbox (Transactional Outbox)
+
+Garantiza at-least-once delivery de domain events aunque la app se caiga entre el save y la publicación del evento.
+
+### Flujo completo
+
+```
+ApproveInvoiceUseCase / RejectInvoiceUseCase
+  → invoice.approve() / invoice.reject()
+  → invoiceRepo.save(invoice)           ← persiste estado nuevo
+  → outboxRepo.save(outboxEvent)        ← persiste evento pendiente (T2: dos saves separados)
+  → auditor.record(...)
+  → Ok(...)
+
+[cada 10s] OutboxPollerWorker (BullMQ Repeatable Job)
+  → outboxRepo.findUnprocessed()
+  → eventEmitter.emit(event.eventType, event)   ← in-process EventEmitter2
+  → outboxRepo.markProcessed(event.id)
+
+[FASE 9 - ahora]  InvoiceApprovedHandler / InvoiceRejectedHandler
+  → logger.info('event received')       ← no-op, solo log
+
+[FASE 11]         InvoiceApprovedHandler / InvoiceRejectedHandler
+  → notifier.notifyStatusChange(...)    ← Nodemailer manda email real
+```
+
+### Tabla `outbox_events`
+
+```sql
+outbox_events
+  id            UUID        PK
+  event_type    VARCHAR     ← 'invoice.approved' | 'invoice.rejected' | ...
+  payload       JSONB       ← evento serializado completo
+  processed     BOOLEAN     DEFAULT false
+  created_at    TIMESTAMP
+  processed_at  TIMESTAMP   NULLABLE
+
+CREATE INDEX idx_outbox_events_processed ON outbox_events(processed) WHERE processed = false;
+```
+
+### Archivos del patrón Outbox
+
+```
+src/domain/events/
+  domain-event.base.ts             ← clase base: { eventType, occurredAt, payload }
+  invoice-approved.event.ts        ← payload: { invoiceId, approverId, status }
+  invoice-rejected.event.ts        ← payload: { invoiceId, approverId, reason, status }
+
+src/application/ports/
+  event-bus.port.ts                ← interface EventBusPort { publish(event: DomainEventBase): Promise<void> }
+
+src/domain/repositories/
+  outbox-event.repository.ts       ← interface: save, findUnprocessed, markProcessed
+
+src/infrastructure/db/
+  entities/outbox-event.orm-entity.ts
+  repositories/outbox-event.typeorm-repository.ts
+  migrations/YYYYMMDDHHMMSS_create_outbox_events.ts
+
+src/infrastructure/events/
+  outbox-event-bus.adapter.ts      ← implementa EventBusPort: guarda en outbox_events
+  handlers/
+    invoice-approved.handler.ts    ← @OnEvent('invoice.approved') → logger (no-op en FASE 9)
+    invoice-rejected.handler.ts    ← @OnEvent('invoice.rejected') → logger (no-op en FASE 9)
+
+src/infrastructure/notification/
+  no-op-notification.adapter.ts    ← implementa NotificationPort, solo logger
+  notification.module.ts
+
+src/interface/jobs/
+  outbox-poller.worker.ts          ← BullMQ Repeatable Job, cada 10s
+```
+
+### Decisiones de diseño (registradas)
+
+| Decisión | Elección | Motivo |
+|----------|----------|--------|
+| Transacciones outbox | T2: dos saves separados | Suficiente por ahora. T1 (Unit of Work atómico) en FASE 13 junto con OpenTelemetry |
+| Worker outbox | BullMQ Repeatable Job | Ya existe BullMQ, visible en Bull Board, con reintentos |
+| EventBus in-process | `@nestjs/event-emitter` (EventEmitter2) | Ligero, suficiente para notificaciones fire-and-forget |
+| Handlers email ahora | No-op (Logger) | FASE 11 implementa el handler real sin tocar use cases ni controllers |
+| NotificationPort en use cases | Eliminado de ApproveInvoiceUseCase y RejectInvoiceUseCase | Los use cases solo conocen EventBusPort. La notificación es responsabilidad del handler |
 📡 API REST: convenciones
 Endpoints
 text
@@ -650,20 +735,36 @@ Las versiones concretas se gestionan en `package.json`. Usar siempre la última 
 
 📋 Fases de desarrollo
 text
-FASE 0  : Setup + Docker                      (1h)
-FASE 1  : Domain entities + value objects + CI básico  (3h) ← TDD
-FASE 2  : Use cases con mocks                 (3h) ← TDD
-FASE 3  : DB migrations + repositories        (2h)
-FASE 4  : Upload PDFs + storage               (2h)
-FASE 5  : OCR Tesseract + parsing             (3h)
-FASE 6  : Colas BullMQ + workers + Bull Board (3h)
-FASE 7  : Adapters por proveedor              (3h)
-FASE 8  : Auth JWT + roles + guards           (3h)
-FASE 9  : Controllers HTTP + Zod pipes        (2h)
+FASE 0  : Setup + Docker                      (1h)   ✅
+FASE 1  : Domain entities + value objects + CI básico  (3h) ← TDD  ✅
+FASE 2  : Use cases con mocks                 (3h) ← TDD  ✅
+FASE 3  : DB migrations + repositories        (2h)   ✅
+FASE 4  : Upload PDFs + storage               (2h)   ✅
+FASE 5  : OCR Tesseract + parsing             (3h)   ✅
+FASE 6  : Colas BullMQ + workers + Bull Board (3h)   ✅
+FASE 7  : Adapters por proveedor              (3h)   ✅
+FASE 8  : Auth JWT + roles + guards           (3h)   ✅
+FASE 9  : Controllers HTTP + Zod pipes + EventBus + Outbox  (4h)  ← EN PROGRESO
+            Bloque 1 ✅ : DomainErrorFilter + helmet + CORS + AuthController refactor
+            Bloque 2 ✅ : GET /invoices + GET /invoices/:id + RolesGuard global
+            Bloque 3  : PATCH approve + PATCH reject + EventBus + Outbox pattern
+              Bloque 3a : Domain events + EventBusPort + OutboxEventBusAdapter
+                          + tabla outbox_events + NoOpNotificationAdapter
+                          + ApproveInvoiceUseCase / RejectInvoiceUseCase refactor
+                          + InvoicesController PATCH endpoints
+              Bloque 3b : OutboxPollerWorker (BullMQ Repeatable) + handlers no-op
+                          + EventEmitterModule en AppModule
+            Bloque 4  : GET /invoices/:id/events
+            Bloque 5  : Cleanup upload (providerId body) + @Roles en todos endpoints
+            Bloque 6  : Coverage check + typecheck + commit
 FASE 10 : Frontend React                      (5h)
 FASE 11 : Emails Nodemailer                   (2h)
+            → Solo cambiar InvoiceApprovedHandler / InvoiceRejectedHandler
+            → NodemailerAdapter implementa NotificationPort
+            → Use cases y controllers NO se tocan
 FASE 12 : Export CSV/JSON                     (1h)
 FASE 13 : Observabilidad OpenTelemetry        (3h)
+            → Unit of Work atómico (T1): invoice + outbox en misma transacción
 FASE 14 : E2E Playwright + CI completo        (2h)
 FASE 15 : Docker Compose completo + deploy    (2h)
 

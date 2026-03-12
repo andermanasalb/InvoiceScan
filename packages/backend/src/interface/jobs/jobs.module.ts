@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { ConfigService } from '@nestjs/config';
 import { DatabaseModule } from '../../infrastructure/db/database.module';
 import { StorageModule } from '../../infrastructure/storage/storage.module';
@@ -8,19 +9,33 @@ import { NoOpAuditAdapter, AUDIT_TOKEN } from '../../infrastructure/audit/no-op-
 import { TesseractAdapter, OCR_TOKEN } from '../../infrastructure/ocr/tesseract.adapter';
 import { AIStudioAdapter } from '../../infrastructure/llm/ai-studio.adapter';
 import { LLM_TOKEN } from '../../application/ports/llm.port';
+import { InvoiceApprovedHandler } from '../../infrastructure/events/handlers/invoice-approved.handler';
+import { InvoiceRejectedHandler } from '../../infrastructure/events/handlers/invoice-rejected.handler';
 import { ProcessInvoiceUseCase } from '../../application/use-cases/process-invoice.use-case';
 import {
   ProcessInvoiceWorker,
   PROCESS_INVOICE_USE_CASE_TOKEN,
 } from './process-invoice.worker';
+import {
+  OutboxPollerWorker,
+  OUTBOX_POLLER_QUEUE,
+} from './outbox-poller.worker';
 import type { InvoiceRepository } from '../../domain/repositories';
+import type { OutboxEventRepository } from '../../domain/repositories/outbox-event.repository';
+import { OUTBOX_EVENT_REPOSITORY } from '../../domain/repositories/outbox-event.repository';
 import type { StoragePort } from '../../application/ports/storage.port';
 import type { AuditPort } from '../../application/ports/audit.port';
 import type { OcrPort } from '../../application/ports/ocr.port';
 import type { LLMPort } from '../../application/ports/llm.port';
 
 @Module({
-  imports: [DatabaseModule, StorageModule, QueueModule],
+  imports: [
+    DatabaseModule,
+    StorageModule,
+    QueueModule,
+    // Cola dedicada para el OutboxPollerWorker
+    BullModule.registerQueue({ name: OUTBOX_POLLER_QUEUE }),
+  ],
   providers: [
     // OCR adapter
     {
@@ -56,6 +71,23 @@ import type { LLMPort } from '../../application/ports/llm.port';
     },
     // Worker — procesa jobs de la cola 'process-invoice'
     ProcessInvoiceWorker,
+    // Worker — lee outbox_events cada 10s y emite al EventEmitter
+    {
+      provide: OutboxPollerWorker,
+      useFactory: (
+        outboxRepo: OutboxEventRepository,
+        pollerQueue: unknown,
+        eventEmitter: unknown,
+      ) => new OutboxPollerWorker(outboxRepo, pollerQueue as never, eventEmitter as never),
+      inject: [
+        OUTBOX_EVENT_REPOSITORY,
+        `BullQueue_${OUTBOX_POLLER_QUEUE}`,
+        'EventEmitter2',
+      ],
+    },
+    // Handlers de eventos — escuchan al EventEmitter (no-op hasta FASE 11)
+    InvoiceApprovedHandler,
+    InvoiceRejectedHandler,
   ],
 })
 export class JobsModule {}

@@ -1,23 +1,73 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Inject,
-  InternalServerErrorException,
+  Param,
+  Patch,
   Post,
+  Query,
   UploadedFile,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
+import { z } from 'zod';
 import { UploadInvoiceUseCase } from '../../../application/use-cases/upload-invoice.use-case';
+import { ListInvoicesUseCase } from '../../../application/use-cases/list-invoices.use-case';
+import { GetInvoiceUseCase } from '../../../application/use-cases/get-invoice.use-case';
+import { ApproveInvoiceUseCase } from '../../../application/use-cases/approve-invoice.use-case';
+import { RejectInvoiceUseCase } from '../../../application/use-cases/reject-invoice.use-case';
+import { GetInvoiceEventsUseCase } from '../../../application/use-cases/get-invoice-events.use-case';
 import { FileValidationPipe } from '../pipes/file-validation.pipe';
+import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { Roles } from '../guards/roles.decorator';
 import { CurrentUser } from '../guards/current-user.decorator';
 import type { AuthenticatedUser } from '../guards/jwt.strategy';
 
 export const UPLOAD_INVOICE_USE_CASE_TOKEN = 'UPLOAD_INVOICE_USE_CASE_TOKEN';
+export const LIST_INVOICES_USE_CASE_TOKEN = 'LIST_INVOICES_USE_CASE_TOKEN';
+export const GET_INVOICE_USE_CASE_TOKEN = 'GET_INVOICE_USE_CASE_TOKEN';
+export const APPROVE_INVOICE_USE_CASE_TOKEN = 'APPROVE_INVOICE_USE_CASE_TOKEN';
+export const REJECT_INVOICE_USE_CASE_TOKEN = 'REJECT_INVOICE_USE_CASE_TOKEN';
+export const GET_INVOICE_EVENTS_USE_CASE_TOKEN = 'GET_INVOICE_EVENTS_USE_CASE_TOKEN';
+
+/**
+ * HTTP-layer query schema for GET /invoices.
+ *
+ * Query params arrive as strings, so we use z.coerce.number() instead of
+ * z.number() — the application-layer DTO uses z.number() (already parsed).
+ */
+const ListInvoicesQuerySchema = z.object({
+  status: z.string().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+  sort: z.string().optional(),
+});
+type ListInvoicesQuery = z.infer<typeof ListInvoicesQuerySchema>;
+
+/** Body schema for PATCH /invoices/:id/reject */
+const RejectBodySchema = z.object({
+  reason: z.string().min(1, 'reason is required'),
+});
+type RejectBody = z.infer<typeof RejectBodySchema>;
+
+/**
+ * Body schema for POST /invoices/upload
+ *
+ * In multipart/form-data requests, text fields arrive alongside the file.
+ * Multer parses them and NestJS exposes them via @Body().
+ * We validate here that providerId is a non-empty UUID.
+ */
+const UploadBodySchema = z.object({
+  providerId: z.string().uuid({ message: 'providerId must be a valid UUID' }),
+});
+type UploadBody = z.infer<typeof UploadBodySchema>;
 
 /**
  * InvoicesController
@@ -26,6 +76,7 @@ export const UPLOAD_INVOICE_USE_CASE_TOKEN = 'UPLOAD_INVOICE_USE_CASE_TOKEN';
  * Contains no business logic — it only translates between HTTP and use cases.
  *
  * All endpoints require a valid JWT (JwtAuthGuard).
+ * Role enforcement is done per-endpoint via @Roles() + the global RolesGuard.
  */
 @Controller('api/v1/invoices')
 @UseGuards(JwtAuthGuard)
@@ -33,20 +84,34 @@ export class InvoicesController {
   constructor(
     @Inject(UPLOAD_INVOICE_USE_CASE_TOKEN)
     private readonly uploadInvoiceUseCase: UploadInvoiceUseCase,
+    @Inject(LIST_INVOICES_USE_CASE_TOKEN)
+    private readonly listInvoicesUseCase: ListInvoicesUseCase,
+    @Inject(GET_INVOICE_USE_CASE_TOKEN)
+    private readonly getInvoiceUseCase: GetInvoiceUseCase,
+    @Inject(APPROVE_INVOICE_USE_CASE_TOKEN)
+    private readonly approveInvoiceUseCase: ApproveInvoiceUseCase,
+    @Inject(REJECT_INVOICE_USE_CASE_TOKEN)
+    private readonly rejectInvoiceUseCase: RejectInvoiceUseCase,
+    @Inject(GET_INVOICE_EVENTS_USE_CASE_TOKEN)
+    private readonly getInvoiceEventsUseCase: GetInvoiceEventsUseCase,
   ) {}
 
   /**
    * POST /api/v1/invoices/upload
    *
-   * Accepts a single PDF file via multipart/form-data under the field
-   * name "file". Multer reads the file into memory (file.buffer) so the
-   * FileValidationPipe and the use case can access the raw bytes without
-   * touching the filesystem at this layer.
+   * Accepts a multipart/form-data request with two parts:
+   *   - "file"       : the PDF binary
+   *   - "providerId" : UUID of the provider that issued this invoice
+   *
+   * Multer reads the file into memory (file.buffer) so the FileValidationPipe
+   * and the use case can access the raw bytes without touching the filesystem.
+   * Text fields in the same multipart form are exposed via @Body().
    *
    * Returns 201 Created with the invoice id and its initial status.
-   * The uploaderId is taken from the verified JWT (no more placeholder UUID).
+   * The uploaderId is taken from the verified JWT.
    */
   @Post('upload')
+  @Roles('uploader', 'validator', 'approver', 'admin')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
     FileInterceptor('file', {
@@ -59,23 +124,176 @@ export class InvoicesController {
     @CurrentUser() user: AuthenticatedUser,
     @UploadedFile(new FileValidationPipe())
     file: Express.Multer.File,
+    @Body() body: UploadBody,
   ) {
-    // TODO (FASE 9): accept providerId from request body once providers exist
-    const PLACEHOLDER_PROVIDER_ID = '00000000-0000-0000-0000-000000000002';
+    const parsed = UploadBodySchema.safeParse(body);
+    if (!parsed.success) {
+      const message = parsed.error.flatten().fieldErrors.providerId?.join(', ')
+        ?? 'providerId must be a valid UUID';
+      throw new BadRequestException(message);
+    }
 
     const result = await this.uploadInvoiceUseCase.execute({
       uploaderId: user.userId,
-      providerId: PLACEHOLDER_PROVIDER_ID,
+      providerId: parsed.data.providerId,
       fileBuffer: file.buffer,
       mimeType: file.mimetype as 'application/pdf',
       fileSizeBytes: file.size,
     });
 
     if (result.isErr()) {
-      // Domain errors that reach the controller are unexpected at this stage.
-      // FASE 9 will add a proper exception filter that maps each DomainError
-      // variant to its specific HTTP status code.
-      throw new InternalServerErrorException(result.error.message);
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * GET /api/v1/invoices
+   *
+   * Returns a paginated list of invoices.
+   * - uploaders see only their own invoices
+   * - validator / approver / admin see all invoices
+   *
+   * Query params: status?, page?, limit?, sort?
+   */
+  @Get()
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async list(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query(new ZodValidationPipe(ListInvoicesQuerySchema)) query: ListInvoicesQuery,
+  ) {
+    const result = await this.listInvoicesUseCase.execute({
+      requesterId: user.userId,
+      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      status: query.status,
+      page: query.page,
+      limit: query.limit,
+      sort: query.sort,
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    const { items, total, page, limit } = result.value;
+    return {
+      data: items,
+      meta: { total, page, limit },
+    };
+  }
+
+  /**
+   * GET /api/v1/invoices/:id
+   *
+   * Returns the full details of a single invoice.
+   * - uploaders can only access their own invoices (use case enforces ownership)
+   * - validator / approver / admin can access any invoice
+   */
+  @Get(':id')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async getOne(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.getInvoiceUseCase.execute({
+      invoiceId,
+      requesterId: user.userId,
+      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * PATCH /api/v1/invoices/:id/approve
+   *
+   * Approves an invoice. Only approvers and admins can call this.
+   * The approverId is taken from the verified JWT.
+   */
+  @Patch(':id/approve')
+  @Roles('approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async approve(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.approveInvoiceUseCase.execute({
+      invoiceId,
+      approverId: user.userId,
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * PATCH /api/v1/invoices/:id/reject
+   *
+   * Rejects an invoice. Only approvers and admins can call this.
+   * Requires a non-empty `reason` in the request body.
+   */
+  @Patch(':id/reject')
+  @Roles('approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async reject(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+    @Body(new ZodValidationPipe(RejectBodySchema)) body: RejectBody,
+  ) {
+    const result = await this.rejectInvoiceUseCase.execute({
+      invoiceId,
+      approverId: user.userId,
+      reason: body.reason,
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * GET /api/v1/invoices/:id/events
+   *
+   * Returns the full state-transition history for a single invoice, ordered
+   * chronologically (oldest first).
+   * - uploaders can only access events for their own invoices
+   * - validator / approver / admin can access any invoice's events
+   */
+  @Get(':id/events')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async getEvents(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.getInvoiceEventsUseCase.execute({
+      invoiceId,
+      requesterId: user.userId,
+      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
     }
 
     return {

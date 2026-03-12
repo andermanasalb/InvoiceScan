@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RejectInvoiceUseCase } from '../reject-invoice.use-case';
 import { InvoiceRepository } from '../../../domain/repositories';
-import { AuditPort, NotificationPort } from '../../ports';
+import { AuditPort } from '../../ports';
+import { EventBusPort } from '../../ports/event-bus.port';
 import { createInvoice, createExtractedData } from '../../../domain/test/factories';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
+import { InvoiceRejectedEvent } from '../../../domain/events/invoice-rejected.event';
 
 const INVOICE_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 const APPROVER_ID = 'b2c3d4e5-f6a7-8901-bcde-f12345678901';
@@ -19,7 +21,7 @@ const makeReadyInvoice = () => {
 describe('RejectInvoiceUseCase', () => {
   let mockRepo: InvoiceRepository;
   let mockAudit: AuditPort;
-  let mockNotifier: NotificationPort;
+  let mockEventBus: EventBusPort;
   let useCase: RejectInvoiceUseCase;
 
   beforeEach(() => {
@@ -32,9 +34,9 @@ describe('RejectInvoiceUseCase', () => {
     };
 
     mockAudit = { record: vi.fn().mockResolvedValue(undefined) };
-    mockNotifier = { notifyStatusChange: vi.fn().mockResolvedValue(undefined) };
+    mockEventBus = { publish: vi.fn().mockResolvedValue(undefined) };
 
-    useCase = new RejectInvoiceUseCase(mockRepo, mockAudit, mockNotifier);
+    useCase = new RejectInvoiceUseCase(mockRepo, mockAudit, mockEventBus);
   });
 
   describe('execute', () => {
@@ -63,10 +65,18 @@ describe('RejectInvoiceUseCase', () => {
       );
     });
 
-    it('should send a notification after rejection', async () => {
-      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, reason: 'Invalid' });
+    it('should publish an InvoiceRejectedEvent with correct payload', async () => {
+      const reason = 'Amount does not match PO';
+      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, reason });
 
-      expect(mockNotifier.notifyStatusChange).toHaveBeenCalledOnce();
+      expect(mockEventBus.publish).toHaveBeenCalledOnce();
+      const publishedEvent = (mockEventBus.publish as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      expect(publishedEvent).toBeInstanceOf(InvoiceRejectedEvent);
+      expect(publishedEvent.eventType).toBe('invoice.rejected');
+      expect(publishedEvent.payload.invoiceId).toBe(INVOICE_ID);
+      expect(publishedEvent.payload.approverId).toBe(APPROVER_ID);
+      expect(publishedEvent.payload.reason).toBe(reason);
+      expect(publishedEvent.payload.status).toBe(InvoiceStatusEnum.REJECTED);
     });
 
     it('should return err when invoice is not found', async () => {
@@ -86,6 +96,14 @@ describe('RejectInvoiceUseCase', () => {
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe('INVALID_STATE_TRANSITION');
+    });
+
+    it('should not publish event when invoice is not found', async () => {
+      mockRepo.findById = vi.fn().mockResolvedValue(null);
+
+      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, reason: 'Invalid' });
+
+      expect(mockEventBus.publish).not.toHaveBeenCalled();
     });
   });
 });
