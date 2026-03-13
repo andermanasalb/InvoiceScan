@@ -8,6 +8,7 @@ import {
   PaginatedResult,
 } from '../../../domain/repositories/invoice.repository';
 import { InvoiceOrmEntity } from '../entities/invoice.orm-entity';
+import { UserOrmEntity } from '../entities/user.orm-entity';
 import { InvoiceMapper } from '../mappers/invoice.mapper';
 
 @Injectable()
@@ -21,6 +22,13 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
     const orm = await this.repo.findOneBy({ id });
     if (!orm) return null;
     return InvoiceMapper.toDomain(orm);
+  }
+
+  async findUploaderEmail(uploaderId: string): Promise<string | null> {
+    const result = await this.repo.manager
+      .getRepository(UserOrmEntity)
+      .findOne({ where: { id: uploaderId }, select: ['email'] });
+    return result?.email ?? null;
   }
 
   async findAll(filters: InvoiceFilters): Promise<PaginatedResult<Invoice>> {

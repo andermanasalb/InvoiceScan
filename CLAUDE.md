@@ -27,8 +27,8 @@ observabilidad y CI/CD.
 
 | Rol       | Puede hacer                                                     |
 |-----------|-----------------------------------------------------------------|
-| uploader  | Subir facturas, ver sus propias facturas                        |
-| validator | Ver todas las facturas, añadir notas, marcar para aprobación    |
+| uploader  | Subir facturas, ver sus propias facturas, revisar datos extraídos y enviar a validación (sus propias facturas) |
+| validator | Ver todas las facturas, añadir notas, enviar a validación (facturas ajenas en EXTRACTED), enviar a aprobación |
 | approver  | Todo lo anterior + aprobar o rechazar facturas                  |
 | admin     | Todo + gestionar usuarios, proveedores y configuración          |
 
@@ -78,7 +78,7 @@ packages/
 │           ├── logger/
 │           └── types/
 │
-└── frontend/                    ← React + Vite application
+└── frontend/                    ← React + Next.js (App Router) application
 ```
 
 El paquete `shared` es la fuente de verdad para tipos y schemas Zod: se define una vez y se consume tanto en backend (validación) como en frontend (formularios), eliminando desincronización.
@@ -248,17 +248,29 @@ CREATE INDEX idx_audit_events_user_id ON audit_events(user_id);
 
 ```
 PENDING
-  → PROCESSING                           (job OCR encolado)
-      → EXTRACTED                        (OCR completado, datos extraídos)
-            → VALIDATION_FAILED          (datos no pasan reglas de negocio)
-            → READY_FOR_APPROVAL         (datos válidos)
-                  → APPROVED             (approver aprueba)
-                  → REJECTED             (approver rechaza)
+  → PROCESSING                               (job OCR encolado automáticamente)
+      → EXTRACTED                            (OCR completado — el worker SE DETIENE AQUÍ)
+            → VALIDATION_FAILED              (datos no pasan reglas de negocio del adapter)
+            → READY_FOR_VALIDATION           (uploader o validator/approver/admin envían manualmente)
+                  → READY_FOR_APPROVAL       (approver/admin envían manualmente)
+                        → APPROVED           (approver aprueba)
+                        → REJECTED           (approver rechaza)
 
-Transiciones de reintento:
-  VALIDATION_FAILED → PROCESSING         (reintento manual por validator/admin)
-  REJECTED          → READY_FOR_APPROVAL (resubmisión tras corrección del proveedor)
+Transiciones manuales:
+  EXTRACTED           → READY_FOR_VALIDATION (uploader revisa datos de la IA y pulsa "Send to Validation" en sus propias facturas;
+                                              validator/approver/admin pueden hacerlo en facturas ajenas)
+  READY_FOR_VALIDATION → READY_FOR_APPROVAL  (approver/admin pulsan "Send to Approval" — no puede ser quien hizo el paso anterior, salvo admin)
+  VALIDATION_FAILED   → PROCESSING           (validator/approver/admin pulsa "Retry" — re-encola job)
+  REJECTED            → READY_FOR_APPROVAL   (resubmisión tras corrección del proveedor)
 ```
+
+> **IMPORTANTE:** El worker `process-invoice` se detiene en `EXTRACTED`. El uploader
+> revisa los datos extraídos por la IA y pulsa "Send to Validation" para iniciar el
+> workflow de revisión humana. La transición `EXTRACTED → READY_FOR_VALIDATION` es
+> una acción humana explícita vía `PATCH /api/v1/invoices/:id/send-to-validation`.
+>
+> **Regla cross-ownership:** quien mueve la factura a `READY_FOR_VALIDATION` (almacenado
+> como `validatorId`) NO puede también moverla a `READY_FOR_APPROVAL`, salvo que sea admin.
 
 ### Reglas de transición
 - Solo transiciones válidas del diagrama arriba.
@@ -486,21 +498,25 @@ src/interface/jobs/
 📡 API REST: convenciones
 Endpoints
 text
-POST   /api/v1/invoices/upload         ← subir PDF
-GET    /api/v1/invoices                ← listar (filtros + paginación)
-GET    /api/v1/invoices/:id            ← detalle
-PATCH  /api/v1/invoices/:id/approve    ← aprobar
-PATCH  /api/v1/invoices/:id/reject     ← rechazar
-GET    /api/v1/invoices/:id/events     ← historial de estados
-POST   /api/v1/invoices/export         ← encola job de export, devuelve { jobId }
-GET    /api/v1/exports/:jobId/status   ← polling: { status, progress, downloadUrl }
-POST   /api/v1/providers               ← crear proveedor (admin)
-GET    /api/v1/providers               ← listar proveedores
+POST   /api/v1/invoices/upload                  ← subir PDF
+GET    /api/v1/invoices                         ← listar (filtros + paginación)
+GET    /api/v1/invoices/:id                     ← detalle
+PATCH  /api/v1/invoices/:id/send-to-approval    ← validator envía a aprobación (EXTRACTED → READY_FOR_APPROVAL)
+PATCH  /api/v1/invoices/:id/retry               ← validator reintenta (VALIDATION_FAILED → PROCESSING)
+PATCH  /api/v1/invoices/:id/approve             ← aprobar
+PATCH  /api/v1/invoices/:id/reject              ← rechazar
+GET    /api/v1/invoices/:id/events              ← historial de estados
+GET    /api/v1/invoices/:id/notes               ← listar notas
+POST   /api/v1/invoices/:id/notes               ← añadir nota (validator/approver/admin)
+POST   /api/v1/invoices/export                  ← encola job de export, devuelve { jobId }
+GET    /api/v1/exports/:jobId/status            ← polling: { status, progress, downloadUrl }
+POST   /api/v1/providers                        ← crear proveedor (admin)
+GET    /api/v1/providers                        ← listar proveedores
 POST   /api/v1/auth/login
 POST   /api/v1/auth/refresh
 POST   /api/v1/auth/logout
-GET    /api/v1/health                  ← health check
-GET    /api/v1/metrics                 ← métricas Prometheus
+GET    /api/v1/health                           ← health check
+GET    /api/v1/metrics                          ← métricas Prometheus
 
 Formato de respuesta (siempre)
 typescript
@@ -603,8 +619,8 @@ services:
       - ./uploads:/app/uploads
 
   frontend:
-    build: ../invoice-flow-frontend
-    ports: ["5173:5173"]
+    build: ./packages/frontend
+    ports: ["3001:3001"]
 
   postgres:
     image: postgres:16-alpine
@@ -726,8 +742,10 @@ Backend   : @nestjs/core, @nestjs/typeorm, typeorm, pg, bullmq, ioredis,
             tesseract.js, nodemailer, zod, neverthrow, jsonwebtoken,
             bcrypt, helmet, winston, @opentelemetry/sdk-node
 
-Frontend  : react, typescript, vite, @tanstack/react-query,
-            react-router-dom, zod
+Frontend  : next.js (App Router), react 19, typescript,
+            @tanstack/react-query, axios, zod, react-hook-form,
+            shadcn/ui, tailwindcss v4, framer-motion,
+            recharts, react-dropzone, sonner
 
 Testing   : vitest, supertest, @playwright/test
 ```
@@ -745,7 +763,12 @@ FASE 6  : Colas BullMQ + workers + Bull Board (3h)   ✅
 FASE 7  : Adapters por proveedor              (3h)   ✅
 FASE 8  : Auth JWT + roles + guards           (3h)   ✅
 FASE 9  : Controllers HTTP + Zod pipes + EventBus + Outbox  (4h)  ✅
-FASE 10 : Frontend React                      (5h)
+FASE 10 : Frontend React                      (5h)   ✅ (parcial)
+            → Next.js App Router + shadcn/ui + TanStack Query
+            → Dashboard, invoice list/detail, upload, login
+            → Role-aware UI y workflow actions
+            → Pendiente: providers page, users page, export UI,
+              provider selector en upload, mobile responsive
 FASE 11 : Emails Nodemailer                   (2h)
             → Solo cambiar InvoiceApprovedHandler / InvoiceRejectedHandler
             → NodemailerAdapter implementa NotificationPort

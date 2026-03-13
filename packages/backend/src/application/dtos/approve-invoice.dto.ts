@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const ApproveInvoiceInputSchema = z.object({
   invoiceId: z.string().uuid(),
   approverId: z.string().uuid(),
+  approverRole: z.enum(['approver', 'admin']),
 });
 export type ApproveInvoiceInput = z.infer<typeof ApproveInvoiceInputSchema>;
 

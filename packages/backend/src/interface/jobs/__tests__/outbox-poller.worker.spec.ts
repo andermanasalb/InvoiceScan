@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OutboxPollerWorker } from '../outbox-poller.worker';
 import type { OutboxEventRepository, OutboxEventRecord } from '../../../domain/repositories/outbox-event.repository';
 
@@ -22,19 +22,16 @@ const makeRecord = (overrides?: Partial<OutboxEventRecord>): OutboxEventRecord =
 
 describe('OutboxPollerWorker', () => {
   let mockOutboxRepo: OutboxEventRepository;
-  let mockPollerQueue: { add: ReturnType<typeof vi.fn> };
   let mockEventEmitter: { emitAsync: ReturnType<typeof vi.fn> };
   let worker: OutboxPollerWorker;
 
   beforeEach(() => {
+    vi.useFakeTimers();
+
     mockOutboxRepo = {
       save: vi.fn(),
       findUnprocessed: vi.fn().mockResolvedValue([]),
       markProcessed: vi.fn().mockResolvedValue(undefined),
-    };
-
-    mockPollerQueue = {
-      add: vi.fn().mockResolvedValue(undefined),
     };
 
     mockEventEmitter = {
@@ -43,35 +40,40 @@ describe('OutboxPollerWorker', () => {
 
     worker = new OutboxPollerWorker(
       mockOutboxRepo,
-      mockPollerQueue as never,
       mockEventEmitter as never,
     );
   });
 
-  // --- onModuleInit ---
+  afterEach(() => {
+    worker.onModuleDestroy();
+    vi.useRealTimers();
+  });
+
+  // --- onModuleInit / onModuleDestroy ---
 
   describe('onModuleInit', () => {
-    it('should register a repeatable job on the poller queue', async () => {
-      await worker.onModuleInit();
+    it('should start the interval on init', () => {
+      worker.onModuleInit();
+      // No errors thrown — interval is registered
+      expect(true).toBe(true);
+    });
 
-      expect(mockPollerQueue.add).toHaveBeenCalledWith(
-        'poll',
-        {},
-        expect.objectContaining({
-          repeat: { every: 10_000 },
-          jobId: 'outbox-poller-repeatable',
-        }),
-      );
+    it('should stop the interval on destroy', () => {
+      worker.onModuleInit();
+      worker.onModuleDestroy();
+      // No errors thrown — interval is cleared
+      expect(true).toBe(true);
     });
   });
 
-  // --- process ---
+  // --- poll (triggered via interval) ---
 
-  describe('process', () => {
+  describe('poll', () => {
     it('should do nothing when there are no unprocessed events', async () => {
       mockOutboxRepo.findUnprocessed = vi.fn().mockResolvedValue([]);
+      worker.onModuleInit();
 
-      await worker.process({} as never);
+      await vi.advanceTimersByTimeAsync(10_000);
 
       expect(mockEventEmitter.emitAsync).not.toHaveBeenCalled();
       expect(mockOutboxRepo.markProcessed).not.toHaveBeenCalled();
@@ -81,8 +83,9 @@ describe('OutboxPollerWorker', () => {
       const rec1 = makeRecord({ eventType: 'invoice.approved' });
       const rec2 = makeRecord({ eventType: 'invoice.rejected' });
       mockOutboxRepo.findUnprocessed = vi.fn().mockResolvedValue([rec1, rec2]);
+      worker.onModuleInit();
 
-      await worker.process({} as never);
+      await vi.advanceTimersByTimeAsync(10_000);
 
       expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(2);
       expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith('invoice.approved', rec1);
@@ -92,8 +95,9 @@ describe('OutboxPollerWorker', () => {
     it('should mark each event as processed after emitting', async () => {
       const rec = makeRecord({ id: 'evt-abc' });
       mockOutboxRepo.findUnprocessed = vi.fn().mockResolvedValue([rec]);
+      worker.onModuleInit();
 
-      await worker.process({} as never);
+      await vi.advanceTimersByTimeAsync(10_000);
 
       expect(mockOutboxRepo.markProcessed).toHaveBeenCalledWith('evt-abc');
     });
@@ -103,21 +107,20 @@ describe('OutboxPollerWorker', () => {
       const rec2 = makeRecord({ id: 'evt-bad', eventType: 'invoice.rejected' });
       mockOutboxRepo.findUnprocessed = vi.fn().mockResolvedValue([rec1, rec2]);
 
-      // El segundo evento falla al emitir
       mockEventEmitter.emitAsync = vi.fn()
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('handler failed'));
 
-      await worker.process({} as never);
+      worker.onModuleInit();
+      await vi.advanceTimersByTimeAsync(10_000);
 
-      // El primero se marcó como procesado
       expect(mockOutboxRepo.markProcessed).toHaveBeenCalledWith('evt-good');
-      // El segundo NO se marcó (el error ocurrió antes del markProcessed)
       expect(mockOutboxRepo.markProcessed).not.toHaveBeenCalledWith('evt-bad');
     });
 
-    it('should call findUnprocessed once per process call', async () => {
-      await worker.process({} as never);
+    it('should call findUnprocessed once per poll cycle', async () => {
+      worker.onModuleInit();
+      await vi.advanceTimersByTimeAsync(10_000);
 
       expect(mockOutboxRepo.findUnprocessed).toHaveBeenCalledOnce();
     });

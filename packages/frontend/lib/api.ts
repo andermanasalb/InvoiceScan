@@ -1,0 +1,187 @@
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
+import { toast } from 'sonner';
+
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3000/api/v1';
+
+// Create axios instance
+export const api = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Token storage (in-memory only - NOT localStorage)
+let accessToken: string | null = null;
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+export const setAccessToken = (token: string | null) => {
+  accessToken = token;
+};
+
+export const getAccessToken = () => accessToken;
+
+// Subscribe to token refresh
+const subscribeTokenRefresh = (callback: (token: string) => void) => {
+  refreshSubscribers.push(callback);
+};
+
+// Notify all subscribers with new token
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.forEach((callback) => callback(token));
+  refreshSubscribers = [];
+};
+
+// Request interceptor - inject Authorization header
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    if (accessToken && config.headers) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor - handle 401 and 429
+api.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // Handle 429 - Rate limit
+    if (error.response?.status === 429) {
+      toast.error('Too many attempts, wait 60 seconds');
+      return Promise.reject(error);
+    }
+
+    // Handle 401 - Unauthorized
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Wait for refresh to complete
+        return new Promise((resolve) => {
+          subscribeTokenRefresh((token: string) => {
+            originalRequest.headers.Authorization = `Bearer ${token}`;
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        // Attempt silent token refresh
+        const response = await api.post('/auth/refresh');
+        const newToken = response.data.data.accessToken;
+
+        setAccessToken(newToken);
+        onTokenRefreshed(newToken);
+        isRefreshing = false;
+
+        // Retry original request with new token
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed - clear auth and redirect to login
+        isRefreshing = false;
+        setAccessToken(null);
+
+        // Only redirect if we're in the browser and not already on login page
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
+// Auth API functions
+export const authApi = {
+  login: async (email: string, password: string) => {
+    const response = await api.post('/auth/login', { email, password });
+    return response.data;
+  },
+
+  refresh: async () => {
+    const response = await api.post('/auth/refresh');
+    return response.data;
+  },
+
+  logout: async () => {
+    await api.post('/auth/logout');
+    setAccessToken(null);
+  },
+};
+
+// Invoice API functions
+export const invoiceApi = {
+  list: async (params: { status?: string; page?: number; limit?: number; sort?: string }) => {
+    const response = await api.get('/invoices', { params });
+    return response.data;
+  },
+
+  getById: async (id: string) => {
+    const response = await api.get(`/invoices/${id}`);
+    return response.data;
+  },
+
+  getEvents: async (id: string) => {
+    const response = await api.get(`/invoices/${id}/events`);
+    return response.data;
+  },
+
+  approve: async (id: string) => {
+    const response = await api.patch(`/invoices/${id}/approve`);
+    return response.data;
+  },
+
+  reject: async (id: string, reason: string) => {
+    const response = await api.patch(`/invoices/${id}/reject`, { reason });
+    return response.data;
+  },
+
+  sendToApproval: async (id: string) => {
+    const response = await api.patch(`/invoices/${id}/send-to-approval`);
+    return response.data;
+  },
+
+  sendToValidation: async (id: string) => {
+    const response = await api.patch(`/invoices/${id}/send-to-validation`);
+    return response.data;
+  },
+
+  retry: async (id: string) => {
+    const response = await api.patch(`/invoices/${id}/retry`);
+    return response.data;
+  },
+
+  getNotes: async (id: string) => {
+    const response = await api.get(`/invoices/${id}/notes`);
+    return response.data;
+  },
+
+  addNote: async (id: string, content: string) => {
+    const response = await api.post(`/invoices/${id}/notes`, { content });
+    return response.data;
+  },
+
+  upload: async (file: File, providerId: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('providerId', providerId);
+
+    const response = await api.post('/invoices/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+};

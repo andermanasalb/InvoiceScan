@@ -64,11 +64,11 @@ describe('ProcessInvoiceUseCase', () => {
   });
 
   describe('execute', () => {
-    it('should transition invoice to READY_FOR_APPROVAL when OCR and LLM succeed', async () => {
+    it('should transition invoice to EXTRACTED when OCR and LLM succeed', async () => {
       const result = await useCase.execute({ invoiceId: INVOICE_ID });
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap().status).toBe(InvoiceStatusEnum.READY_FOR_APPROVAL);
+      expect(result._unsafeUnwrap().status).toBe(InvoiceStatusEnum.EXTRACTED);
     });
 
     it('should store rawText and all 7 LLM fields in extractedData', async () => {
@@ -153,7 +153,8 @@ describe('ProcessInvoiceUseCase', () => {
     it('should persist the invoice after processing', async () => {
       await useCase.execute({ invoiceId: INVOICE_ID });
 
-      expect(mockRepo.save).toHaveBeenCalledOnce();
+      // save is called twice: once for PROCESSING state, once for final state
+      expect(mockRepo.save).toHaveBeenCalledTimes(2);
     });
 
     it('should record an audit event with action process', async () => {

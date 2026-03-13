@@ -12,6 +12,7 @@ export interface LoginOutput {
   refreshToken: string;
   userId: string;
   role: string;
+  email: string;
 }
 
 // ── Refresh token ─────────────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ export class LoginUseCase {
       refreshToken,
       userId: user.getId(),
       role: user.getRole(),
+      email: user.getEmail(),
     });
   }
 }

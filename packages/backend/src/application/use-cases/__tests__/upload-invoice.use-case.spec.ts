@@ -49,6 +49,7 @@ describe('UploadInvoiceUseCase', () => {
 
     mockQueue = {
       enqueueProcessing: vi.fn().mockResolvedValue(undefined),
+      enqueueRetry: vi.fn().mockResolvedValue(undefined),
     };
 
     useCase = new UploadInvoiceUseCase(mockRepo, mockStorage, mockAudit, mockQueue);

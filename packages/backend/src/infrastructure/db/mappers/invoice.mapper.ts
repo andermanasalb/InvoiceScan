@@ -15,7 +15,7 @@ export class InvoiceMapper {
   static toDomain(orm: InvoiceOrmEntity): Invoice {
     // Reconstruct Value Objects from raw DB primitives
     const amount =
-      orm.amount === 0
+      Number(orm.amount) === 0
         ? InvoiceAmount.createPlaceholder()
         : InvoiceAmount.create(Number(orm.amount))._unsafeUnwrap();
 
@@ -50,6 +50,7 @@ export class InvoiceMapper {
       status,
       extractedData,
       validationErrors: orm.validationErrors ?? [],
+      validatorId: orm.validatorId,
       approverId: orm.approverId,
       rejectionReason: orm.rejectionReason,
     });
@@ -70,6 +71,7 @@ export class InvoiceMapper {
     orm.extractedData =
       domain.getExtractedData() as Record<string, unknown> | null;
     orm.validationErrors = domain.getValidationErrors();
+    orm.validatorId = domain.getValidatorId();
     orm.approverId = domain.getApproverId();
     orm.rejectionReason = domain.getRejectionReason();
     orm.createdAt = domain.getCreatedAt();

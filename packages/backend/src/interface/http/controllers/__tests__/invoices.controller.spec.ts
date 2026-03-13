@@ -1,3 +1,4 @@
+import { APP_GUARD } from '@nestjs/core';
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -10,8 +11,12 @@ import {
   APPROVE_INVOICE_USE_CASE_TOKEN,
   REJECT_INVOICE_USE_CASE_TOKEN,
   GET_INVOICE_EVENTS_USE_CASE_TOKEN,
+  SEND_TO_APPROVAL_USE_CASE_TOKEN,
+  SEND_TO_VALIDATION_USE_CASE_TOKEN,
+  RETRY_INVOICE_USE_CASE_TOKEN,
+  ADD_NOTE_USE_CASE_TOKEN,
+  GET_INVOICE_NOTES_USE_CASE_TOKEN,
 } from '../invoices.controller';
-import { JwtAuthGuard } from '../../guards/jwt-auth.guard';
 import { InvoiceNotFoundError } from '../../../../domain/errors/invoice.errors.js';
 import { InvalidStateTransitionError } from '../../../../domain/errors/invoice.errors.js';
 import type { AuthenticatedUser } from '../../guards/jwt.strategy';
@@ -72,6 +77,11 @@ describe('InvoicesController (e2e)', () => {
   const mockApproveUseCase = { execute: vi.fn() };
   const mockRejectUseCase = { execute: vi.fn() };
   const mockGetEventsUseCase = { execute: vi.fn() };
+  const mockSendToApprovalUseCase = { execute: vi.fn() };
+  const mockSendToValidationUseCase = { execute: vi.fn() };
+  const mockRetryUseCase = { execute: vi.fn() };
+  const mockAddNoteUseCase = { execute: vi.fn() };
+  const mockGetNotesUseCase = { execute: vi.fn() };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -101,18 +111,40 @@ describe('InvoicesController (e2e)', () => {
           provide: GET_INVOICE_EVENTS_USE_CASE_TOKEN,
           useValue: mockGetEventsUseCase,
         },
+        {
+          provide: SEND_TO_APPROVAL_USE_CASE_TOKEN,
+          useValue: mockSendToApprovalUseCase,
+        },
+        {
+          provide: SEND_TO_VALIDATION_USE_CASE_TOKEN,
+          useValue: mockSendToValidationUseCase,
+        },
+        {
+          provide: RETRY_INVOICE_USE_CASE_TOKEN,
+          useValue: mockRetryUseCase,
+        },
+        {
+          provide: ADD_NOTE_USE_CASE_TOKEN,
+          useValue: mockAddNoteUseCase,
+        },
+        {
+          provide: GET_INVOICE_NOTES_USE_CASE_TOKEN,
+          useValue: mockGetNotesUseCase,
+        },
+        // Register the mock JWT guard globally (mirrors app.module.ts APP_GUARD),
+        // so it runs for ALL routes and populates req.user for @CurrentUser().
+        {
+          provide: APP_GUARD,
+          useValue: {
+            canActivate: (ctx: ExecutionContext) => {
+              const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+              req.user = currentUser;
+              return true;
+            },
+          },
+        },
       ],
     })
-      // Replace JwtAuthGuard with a guard that always allows access and
-      // injects the fake user so @CurrentUser() resolves correctly.
-      .overrideGuard(JwtAuthGuard)
-      .useValue({
-        canActivate: (ctx: ExecutionContext) => {
-          const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
-          req.user = currentUser;
-          return true;
-        },
-      })
       .compile();
 
     app = moduleRef.createNestApplication();

@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
-import { DomainError } from '../../../domain/errors/domain.error';
+import type { DomainError } from '../../../domain/errors/domain.error';
 
 /**
  * Maps DomainError.code values to HTTP status codes.
@@ -30,6 +30,7 @@ const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
 
   // 403
   UNAUTHORIZED: HttpStatus.FORBIDDEN,
+  SELF_ACTION_NOT_ALLOWED: HttpStatus.FORBIDDEN,
 
   // 409
   INVALID_STATE_TRANSITION: HttpStatus.CONFLICT,
@@ -70,6 +71,24 @@ const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
 export class DomainErrorFilter implements ExceptionFilter {
   private readonly logger = new Logger(DomainErrorFilter.name);
 
+  /**
+   * Duck-type check for DomainError.
+   *
+   * We avoid `instanceof DomainError` because with SWC + ESM the class can be
+   * resolved in multiple module contexts, breaking the prototype chain and
+   * causing instanceof to return false even for genuine DomainError instances.
+   * Checking for the structural contract (code + message strings) is reliable
+   * regardless of module identity.
+   */
+  private isDomainError(e: unknown): e is DomainError {
+    return (
+      typeof e === 'object' &&
+      e !== null &&
+      typeof (e as DomainError).code === 'string' &&
+      typeof (e as DomainError).message === 'string'
+    );
+  }
+
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const res = ctx.getResponse<Response>();
@@ -83,7 +102,7 @@ export class DomainErrorFilter implements ExceptionFilter {
     }
 
     // ── 2. DomainError — map to correct HTTP status ───────────────────────
-    if (exception instanceof DomainError) {
+    if (this.isDomainError(exception)) {
       const status =
         DOMAIN_ERROR_STATUS_MAP[exception.code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
 
@@ -105,8 +124,12 @@ export class DomainErrorFilter implements ExceptionFilter {
     // ── 3. Unknown error — 500 ────────────────────────────────────────────
     const errMessage =
       exception instanceof Error ? exception.message : String(exception);
+    const extra =
+      exception instanceof Error
+        ? exception.stack
+        : JSON.stringify(exception, null, 2);
 
-    this.logger.error(`Unhandled exception: ${errMessage}`, exception instanceof Error ? exception.stack : undefined);
+    this.logger.error(`Unhandled exception: ${errMessage}`, extra);
 
     res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
       error: {

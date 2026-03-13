@@ -14,12 +14,21 @@ import { OcrError } from '../../domain/errors/ocr.errors';
  *
  * Idiomas: español ('spa') + inglés ('eng') — cubre la mayoría de facturas.
  */
+const OCR_TIMEOUT_MS = 60_000;
+
 export class TesseractAdapter implements OcrPort {
   async extractText(buffer: Buffer): Promise<Result<OcrResult, OcrError>> {
     const worker = await createWorker(['spa', 'eng']);
 
     try {
-      const { data } = await worker.recognize(buffer);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`OCR timed out after ${OCR_TIMEOUT_MS / 1000}s`)),
+          OCR_TIMEOUT_MS,
+        ),
+      );
+
+      const { data } = await Promise.race([worker.recognize(buffer), timeout]);
 
       return ok({
         text: data.text,

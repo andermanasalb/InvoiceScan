@@ -22,7 +22,7 @@ describe('GetInvoiceUseCase', () => {
       delete: vi.fn(),
     };
 
-    useCase = new GetInvoiceUseCase(mockRepo);
+    useCase = new GetInvoiceUseCase(mockRepo, vi.fn().mockResolvedValue('uploader@example.com'));
   });
 
   describe('execute', () => {

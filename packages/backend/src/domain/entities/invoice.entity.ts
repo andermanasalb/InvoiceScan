@@ -33,6 +33,7 @@ export class Invoice {
   private status: InvoiceStatus;
   private extractedData: ExtractedData | null = null;
   private validationErrors: string[] = [];
+  private validatorId: string | null = null;
   private approverId: string | null = null;
   private rejectionReason: string | null = null;
 
@@ -83,6 +84,7 @@ export class Invoice {
     status: InvoiceStatus;
     extractedData: ExtractedData | null;
     validationErrors: string[];
+    validatorId: string | null;
     approverId: string | null;
     rejectionReason: string | null;
   }): Invoice {
@@ -98,6 +100,7 @@ export class Invoice {
     invoice.status = props.status;
     invoice.extractedData = props.extractedData;
     invoice.validationErrors = props.validationErrors;
+    invoice.validatorId = props.validatorId;
     invoice.approverId = props.approverId;
     invoice.rejectionReason = props.rejectionReason;
     return invoice;
@@ -157,8 +160,26 @@ export class Invoice {
     return ok(undefined);
   }
 
-  markReadyForApproval(): Result<void, InvalidStateTransitionError> {
+  markReadyForValidation(
+    validatorId: string,
+  ): Result<void, InvalidStateTransitionError> {
     if (this.status.getValue() !== InvoiceStatusEnum.EXTRACTED) {
+      return err(
+        new InvalidStateTransitionError(
+          this.status.getValue(),
+          InvoiceStatusEnum.READY_FOR_VALIDATION,
+        ),
+      );
+    }
+    this.validatorId = validatorId;
+    this.status = InvoiceStatus.create(
+      InvoiceStatusEnum.READY_FOR_VALIDATION,
+    )._unsafeUnwrap();
+    return ok(undefined);
+  }
+
+  markReadyForApproval(): Result<void, InvalidStateTransitionError> {
+    if (this.status.getValue() !== InvoiceStatusEnum.READY_FOR_VALIDATION) {
       return err(
         new InvalidStateTransitionError(
           this.status.getValue(),
@@ -255,6 +276,9 @@ export class Invoice {
   }
   getValidationErrors(): string[] {
     return this.validationErrors;
+  }
+  getValidatorId(): string | null {
+    return this.validatorId;
   }
   getApproverId(): string | null {
     return this.approverId;

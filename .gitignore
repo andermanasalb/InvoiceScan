@@ -29,3 +29,14 @@ nul
 
 # Coverage
 coverage/
+
+# Next.js
+.next/
+out/
+
+# Tesseract trained data (binary, large)
+*.traineddata
+
+# Temp / test scripts
+gen_pdf.js
+test_invoice.pdf

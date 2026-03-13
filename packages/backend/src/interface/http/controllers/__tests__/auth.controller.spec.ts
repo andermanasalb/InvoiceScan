@@ -1,3 +1,4 @@
+import { APP_GUARD } from '@nestjs/core';
 import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
@@ -9,7 +10,6 @@ import {
   REFRESH_TOKEN_USE_CASE_TOKEN,
   LOGOUT_USE_CASE_TOKEN,
 } from '../auth.controller';
-import { JwtAuthGuard } from '../../guards/jwt-auth.guard';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import type { AuthenticatedUser } from '../../guards/jwt.strategy';
 
@@ -46,17 +46,20 @@ describe('AuthController (e2e)', () => {
         { provide: LOGIN_USE_CASE_TOKEN, useValue: mockLoginUseCase },
         { provide: REFRESH_TOKEN_USE_CASE_TOKEN, useValue: mockRefreshUseCase },
         { provide: LOGOUT_USE_CASE_TOKEN, useValue: mockLogoutUseCase },
+        // Register the mock JWT guard globally (same way app.module.ts does),
+        // so it runs for ALL routes including refresh and logout.
+        {
+          provide: APP_GUARD,
+          useValue: {
+            canActivate: (ctx: ExecutionContext) => {
+              const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+              req.user = FAKE_USER;
+              return true;
+            },
+          },
+        },
       ],
     })
-      // Bypass Passport JWT — inject fake user into req.user
-      .overrideGuard(JwtAuthGuard)
-      .useValue({
-        canActivate: (ctx: ExecutionContext) => {
-          const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
-          req.user = FAKE_USER;
-          return true;
-        },
-      })
       // Bypass throttler — not what we're testing here
       .overrideGuard(ThrottlerGuard)
       .useValue({ canActivate: () => true })
@@ -167,6 +170,11 @@ describe('AuthController (e2e)', () => {
 
   // ── POST /api/v1/auth/refresh ─────────────────────────────────────────────
 
+  // A fake refresh token whose base64url-encoded payload contains
+  // { sub: FAKE_USER.userId } — the controller decodes this to extract userId.
+  const FAKE_REFRESH_TOKEN =
+    'header.eyJzdWIiOiJ1c2VyLXV1aWQtMDAxIn0.sig';
+
   describe('POST /api/v1/auth/refresh', () => {
     it('should return 200 with new accessToken when refresh cookie is valid', async () => {
       mockRefreshUseCase.execute.mockResolvedValue({
@@ -177,7 +185,7 @@ describe('AuthController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .set('Cookie', 'refreshToken=valid.refresh.token');
+        .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
       expect(response.status).toBe(200);
       expect(response.body.data.accessToken).toBe('new.access.token');
@@ -200,7 +208,7 @@ describe('AuthController (e2e)', () => {
 
       const response = await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .set('Cookie', 'refreshToken=expired.token');
+        .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
       expect(response.status).toBe(401);
     });
@@ -214,14 +222,14 @@ describe('AuthController (e2e)', () => {
 
       await request(app.getHttpServer())
         .post('/api/v1/auth/refresh')
-        .set('Cookie', 'refreshToken=some.refresh.token');
+        .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
       const arg = mockRefreshUseCase.execute.mock.calls.at(-1)?.[0] as {
         userId: string;
         refreshToken: string;
       };
       expect(arg.userId).toBe(FAKE_USER.userId);
-      expect(arg.refreshToken).toBe('some.refresh.token');
+      expect(arg.refreshToken).toBe(FAKE_REFRESH_TOKEN);
     });
   });
 

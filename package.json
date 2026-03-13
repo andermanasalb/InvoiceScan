@@ -2,10 +2,19 @@
   "name": "invoice-flow",
   "private": true,
   "scripts": {
-    "dev:backend": "pnpm --filter backend start:dev",
+    "kill-ports": "kill-port 3000 3001 || true",
+    "dev": "pnpm kill-ports && docker compose up -d && wait-on tcp:localhost:5433 tcp:localhost:6379 && pnpm --filter backend migration:run && pnpm --filter backend seed && concurrently --names backend,frontend --prefix-colors blue,green --kill-others-on-fail \"pnpm --filter backend start:dev\" \"pnpm --filter @invoice-flow/frontend dev\"",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
     "build": "pnpm --filter '*' build",
     "lint": "pnpm --filter '*' lint",
     "typecheck": "pnpm --filter '*' typecheck",
     "test": "pnpm --filter '*' test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "kill-port": "^2.0.1",
+    "wait-on": "^9.0.4"
   }
 }

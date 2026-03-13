@@ -51,6 +51,8 @@ Responde con este JSON (y nada más):
 
 // ─── Adapter ─────────────────────────────────────────────────────────────────
 
+const LLM_TIMEOUT_MS = 30_000;
+
 export class AIStudioAdapter implements LLMPort {
   private readonly client: GoogleGenerativeAI;
 
@@ -80,17 +82,31 @@ export class AIStudioAdapter implements LLMPort {
       });
 
       const prompt = buildPrompt(ocrText);
-      const response = await generativeModel.generateContent(prompt);
+
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`LLM timed out after ${LLM_TIMEOUT_MS / 1000}s`)),
+          LLM_TIMEOUT_MS,
+        ),
+      );
+
+      const response = await Promise.race([
+        generativeModel.generateContent(prompt),
+        timeout,
+      ]);
       const rawText = response.response.text();
+
+      // Eliminar posibles markdown fences (```json ... ```) que devuelva el LLM
+      const cleaned = rawText.replace(/```(?:json)?/gi, '').trim();
 
       // Parsear JSON
       let parsed: unknown;
       try {
-        parsed = JSON.parse(rawText);
+        parsed = JSON.parse(cleaned);
       } catch {
         return err(
           new LLMError(
-            `La respuesta del LLM no es JSON válido: ${rawText.slice(0, 200)}`,
+            `La respuesta del LLM no es JSON válido: ${cleaned.slice(0, 200)}`,
           ),
         );
       }

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { Reflector } from '@nestjs/core';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtAuthGuard } from '../jwt-auth.guard';
 
 describe('JwtAuthGuard', () => {
-  const guard = new JwtAuthGuard();
+  const guard = new JwtAuthGuard(new Reflector());
 
   describe('handleRequest', () => {
     it('should return the user when no error and user is present', () => {

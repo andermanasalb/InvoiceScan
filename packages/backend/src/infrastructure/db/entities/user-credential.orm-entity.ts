@@ -3,7 +3,7 @@ import {
   PrimaryColumn,
   Column,
   CreateDateColumn,
-  OneToOne,
+  ManyToOne,
   JoinColumn,
 } from 'typeorm';
 import { UserOrmEntity } from './user.orm-entity';
@@ -22,7 +22,7 @@ export class UserCredentialOrmEntity {
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 
-  @OneToOne(() => UserOrmEntity, (user) => user.credential)
+  @ManyToOne(() => UserOrmEntity)
   @JoinColumn({ name: 'user_id' })
   user: UserOrmEntity;
 }

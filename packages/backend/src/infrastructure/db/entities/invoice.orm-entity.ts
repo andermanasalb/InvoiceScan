@@ -38,6 +38,9 @@ export class InvoiceOrmEntity {
   @Column({ name: 'validation_errors', type: 'text', array: true, default: [] })
   validationErrors: string[];
 
+  @Column({ name: 'validator_id', type: 'uuid', nullable: true })
+  validatorId: string | null;
+
   @Column({ name: 'approver_id', type: 'uuid', nullable: true })
   approverId: string | null;
 

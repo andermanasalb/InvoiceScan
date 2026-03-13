@@ -11,7 +11,6 @@ import {
   Post,
   Query,
   UploadedFile,
-  UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -23,9 +22,13 @@ import { GetInvoiceUseCase } from '../../../application/use-cases/get-invoice.us
 import { ApproveInvoiceUseCase } from '../../../application/use-cases/approve-invoice.use-case';
 import { RejectInvoiceUseCase } from '../../../application/use-cases/reject-invoice.use-case';
 import { GetInvoiceEventsUseCase } from '../../../application/use-cases/get-invoice-events.use-case';
+import { SendToApprovalUseCase } from '../../../application/use-cases/send-to-approval.use-case';
+import { RetryInvoiceUseCase } from '../../../application/use-cases/retry-invoice.use-case';
+import { AddNoteUseCase } from '../../../application/use-cases/add-note.use-case';
+import { GetInvoiceNotesUseCase } from '../../../application/use-cases/get-invoice-notes.use-case';
+import { SendToValidationUseCase } from '../../../application/use-cases/send-to-validation.use-case';
 import { FileValidationPipe } from '../pipes/file-validation.pipe';
 import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { Roles } from '../guards/roles.decorator';
 import { CurrentUser } from '../guards/current-user.decorator';
 import type { AuthenticatedUser } from '../guards/jwt.strategy';
@@ -36,6 +39,11 @@ export const GET_INVOICE_USE_CASE_TOKEN = 'GET_INVOICE_USE_CASE_TOKEN';
 export const APPROVE_INVOICE_USE_CASE_TOKEN = 'APPROVE_INVOICE_USE_CASE_TOKEN';
 export const REJECT_INVOICE_USE_CASE_TOKEN = 'REJECT_INVOICE_USE_CASE_TOKEN';
 export const GET_INVOICE_EVENTS_USE_CASE_TOKEN = 'GET_INVOICE_EVENTS_USE_CASE_TOKEN';
+export const SEND_TO_APPROVAL_USE_CASE_TOKEN = 'SEND_TO_APPROVAL_USE_CASE_TOKEN';
+export const SEND_TO_VALIDATION_USE_CASE_TOKEN = 'SEND_TO_VALIDATION_USE_CASE_TOKEN';
+export const RETRY_INVOICE_USE_CASE_TOKEN = 'RETRY_INVOICE_USE_CASE_TOKEN';
+export const ADD_NOTE_USE_CASE_TOKEN = 'ADD_NOTE_USE_CASE_TOKEN';
+export const GET_INVOICE_NOTES_USE_CASE_TOKEN = 'GET_INVOICE_NOTES_USE_CASE_TOKEN';
 
 /**
  * HTTP-layer query schema for GET /invoices.
@@ -57,6 +65,12 @@ const RejectBodySchema = z.object({
 });
 type RejectBody = z.infer<typeof RejectBodySchema>;
 
+/** Body schema for POST /invoices/:id/notes */
+const AddNoteBodySchema = z.object({
+  content: z.string().min(1, 'content is required').max(2000),
+});
+type AddNoteBody = z.infer<typeof AddNoteBodySchema>;
+
 /**
  * Body schema for POST /invoices/upload
  *
@@ -75,11 +89,10 @@ type UploadBody = z.infer<typeof UploadBodySchema>;
  * Handles all HTTP requests related to invoices.
  * Contains no business logic — it only translates between HTTP and use cases.
  *
- * All endpoints require a valid JWT (JwtAuthGuard).
+ * All endpoints require a valid JWT — enforced globally by JwtAuthGuard.
  * Role enforcement is done per-endpoint via @Roles() + the global RolesGuard.
  */
 @Controller('api/v1/invoices')
-@UseGuards(JwtAuthGuard)
 export class InvoicesController {
   constructor(
     @Inject(UPLOAD_INVOICE_USE_CASE_TOKEN)
@@ -94,6 +107,16 @@ export class InvoicesController {
     private readonly rejectInvoiceUseCase: RejectInvoiceUseCase,
     @Inject(GET_INVOICE_EVENTS_USE_CASE_TOKEN)
     private readonly getInvoiceEventsUseCase: GetInvoiceEventsUseCase,
+    @Inject(SEND_TO_APPROVAL_USE_CASE_TOKEN)
+    private readonly sendToApprovalUseCase: SendToApprovalUseCase,
+    @Inject(SEND_TO_VALIDATION_USE_CASE_TOKEN)
+    private readonly sendToValidationUseCase: SendToValidationUseCase,
+    @Inject(RETRY_INVOICE_USE_CASE_TOKEN)
+    private readonly retryInvoiceUseCase: RetryInvoiceUseCase,
+    @Inject(ADD_NOTE_USE_CASE_TOKEN)
+    private readonly addNoteUseCase: AddNoteUseCase,
+    @Inject(GET_INVOICE_NOTES_USE_CASE_TOKEN)
+    private readonly getInvoiceNotesUseCase: GetInvoiceNotesUseCase,
   ) {}
 
   /**
@@ -231,6 +254,7 @@ export class InvoicesController {
     const result = await this.approveInvoiceUseCase.execute({
       invoiceId,
       approverId: user.userId,
+      approverRole: user.role as 'approver' | 'admin',
     });
 
     if (result.isErr()) {
@@ -259,6 +283,7 @@ export class InvoicesController {
     const result = await this.rejectInvoiceUseCase.execute({
       invoiceId,
       approverId: user.userId,
+      approverRole: user.role as 'approver' | 'admin',
       reason: body.reason,
     });
 
@@ -290,6 +315,151 @@ export class InvoicesController {
       invoiceId,
       requesterId: user.userId,
       requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * PATCH /api/v1/invoices/:id/send-to-validation
+   *
+   * Moves an EXTRACTED invoice to READY_FOR_VALIDATION.
+   * The uploader reviews the AI-extracted data and sends it to validation.
+   * Validators, approvers, and admins can also call this.
+   */
+  @Patch(':id/send-to-validation')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async sendToValidation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.sendToValidationUseCase.execute({
+      invoiceId,
+      validatorId: user.userId,
+      validatorRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * PATCH /api/v1/invoices/:id/send-to-approval
+   *
+   * Moves a READY_FOR_VALIDATION invoice to READY_FOR_APPROVAL.
+   * Only approvers and admins can call this.
+   * The same person who moved it to READY_FOR_VALIDATION cannot also call this
+   * (unless they are admin).
+   */
+  @Patch(':id/send-to-approval')
+  @Roles('approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async sendToApproval(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.sendToApprovalUseCase.execute({
+      invoiceId,
+      validatorId: user.userId,
+      validatorRole: user.role as 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * PATCH /api/v1/invoices/:id/retry
+   *
+   * Retries a VALIDATION_FAILED invoice by moving it back to PROCESSING
+   * and re-enqueuing the OCR job.
+   * Validators, approvers, and admins can call this.
+   */
+  @Patch(':id/retry')
+  @Roles('validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async retry(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.retryInvoiceUseCase.execute({
+      invoiceId,
+      requesterId: user.userId,
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * GET /api/v1/invoices/:id/notes
+   *
+   * Returns all notes for a single invoice, ordered chronologically.
+   * - uploaders can only access notes for their own invoices
+   * - validator / approver / admin can access any invoice's notes
+   */
+  @Get(':id/notes')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async getNotes(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+  ) {
+    const result = await this.getInvoiceNotesUseCase.execute({
+      invoiceId,
+      requesterId: user.userId,
+      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
+    };
+  }
+
+  /**
+   * POST /api/v1/invoices/:id/notes
+   *
+   * Adds a note to an invoice.
+   * Validators, approvers, and admins can add notes.
+   */
+  @Post(':id/notes')
+  @Roles('validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.CREATED)
+  async addNote(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+    @Body(new ZodValidationPipe(AddNoteBodySchema)) body: AddNoteBody,
+  ) {
+    const result = await this.addNoteUseCase.execute({
+      invoiceId,
+      authorId: user.userId,
+      content: body.content,
     });
 
     if (result.isErr()) {

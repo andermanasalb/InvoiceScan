@@ -12,7 +12,10 @@ const ROLES_WITH_FULL_ACCESS: string[] = [
 ];
 
 export class GetInvoiceUseCase {
-  constructor(private readonly invoiceRepo: InvoiceRepository) {}
+  constructor(
+    private readonly invoiceRepo: InvoiceRepository,
+    private readonly findUploaderEmail: (uploaderId: string) => Promise<string | null>,
+  ) {}
 
   async execute(
     input: GetInvoiceInput,
@@ -27,18 +30,36 @@ export class GetInvoiceUseCase {
       return err(new UnauthorizedError('access invoice'));
     }
 
+    const raw = invoice.getExtractedData();
+    const extractedData = raw
+      ? {
+          total: raw.total ?? null,
+          fecha: raw.fecha ?? null,
+          numeroFactura: raw.numeroFactura ?? null,
+          nombreEmisor: raw.nombreEmisor ?? null,
+          nifEmisor: raw.nifEmisor ?? null,
+          baseImponible: raw.baseImponible ?? null,
+          iva: raw.iva ?? null,
+        }
+      : null;
+
+    const uploaderEmail = await this.findUploaderEmail(invoice.getUploaderId());
+
     return ok({
       invoiceId: invoice.getId(),
       status: invoice.getStatus().getValue(),
       uploaderId: invoice.getUploaderId(),
+      uploaderEmail,
       providerId: invoice.getProviderId(),
       filePath: invoice.getFilePath(),
       amount: invoice.getAmount().getValue(),
       date: invoice.getDate().getValue(),
       createdAt: invoice.getCreatedAt(),
+      validatorId: invoice.getValidatorId(),
       approverId: invoice.getApproverId(),
       rejectionReason: invoice.getRejectionReason(),
       validationErrors: invoice.getValidationErrors(),
+      extractedData,
     });
   }
 }

@@ -1,0 +1,144 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* InvoiceScan Dark Mode Color Palette - Always Dark */
+:root {
+  /* Background: #09090B (zinc-950) */
+  --background: #09090B;
+  /* Foreground: #FAFAFA (zinc-50) */
+  --foreground: #FAFAFA;
+  /* Surface cards: #18181B (zinc-900) */
+  --card: #18181B;
+  --card-foreground: #FAFAFA;
+  --popover: #18181B;
+  --popover-foreground: #FAFAFA;
+  /* Primary accent: #6366F1 (indigo-500) */
+  --primary: #6366F1;
+  --primary-foreground: #FAFAFA;
+  /* Secondary */
+  --secondary: #27272A;
+  --secondary-foreground: #FAFAFA;
+  /* Muted: zinc-500 for text */
+  --muted: #27272A;
+  --muted-foreground: #71717A;
+  /* Accent */
+  --accent: #27272A;
+  --accent-foreground: #FAFAFA;
+  /* Destructive: #F43F5E (rose-500) */
+  --destructive: #F43F5E;
+  --destructive-foreground: #FAFAFA;
+  /* Border: #27272A (zinc-800) */
+  --border: #27272A;
+  --input: #27272A;
+  --ring: #6366F1;
+  /* Status colors */
+  --success: #10B981;
+  --warning: #F59E0B;
+  --danger: #F43F5E;
+  --chart-1: #6366F1;
+  --chart-2: #10B981;
+  --chart-3: #F59E0B;
+  --chart-4: #F43F5E;
+  --chart-5: #06B6D4;
+  --radius: 0.75rem;
+  /* Sidebar */
+  --sidebar: #09090B;
+  --sidebar-foreground: #FAFAFA;
+  --sidebar-primary: #6366F1;
+  --sidebar-primary-foreground: #FAFAFA;
+  --sidebar-accent: #18181B;
+  --sidebar-accent-foreground: #FAFAFA;
+  --sidebar-border: #27272A;
+  --sidebar-ring: #6366F1;
+}
+
+@theme inline {
+  --font-sans: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Geist Mono', 'SF Mono', 'Fira Code', monospace;
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+/* Shimmer animation for skeleton loaders */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.animate-shimmer {
+  background: linear-gradient(
+    90deg,
+    #27272A 0%,
+    #3f3f46 50%,
+    #27272A 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Pulse animation for dropzone border */
+@keyframes border-pulse {
+  0%, 100% {
+    border-color: #6366F1;
+  }
+  50% {
+    border-color: #4F46E5;
+  }
+}
+
+.animate-border-pulse {
+  animation: border-pulse 1s ease-in-out infinite;
+}

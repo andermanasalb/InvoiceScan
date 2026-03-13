@@ -53,3 +53,11 @@ export class InvalidFieldError extends DomainError {
     super(`Invalid field '${field}': ${reason}`);
   }
 }
+
+export class SelfActionNotAllowedError extends DomainError {
+  readonly code = 'SELF_ACTION_NOT_ALLOWED';
+
+  constructor() {
+    super('You cannot perform this action on your own invoice');
+  }
+}

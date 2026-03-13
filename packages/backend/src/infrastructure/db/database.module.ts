@@ -10,6 +10,7 @@ import {
   InvoiceEventOrmEntity,
   AuditEventOrmEntity,
   OutboxEventOrmEntity,
+  InvoiceNoteOrmEntity,
 } from './entities';
 
 import {
@@ -21,10 +22,12 @@ import {
   AuditEventTypeOrmRepository,
   OutboxEventTypeOrmRepository,
   InvoiceEventTypeOrmRepository,
+  InvoiceNoteTypeOrmRepository,
 } from './repositories';
 
 import { OUTBOX_EVENT_REPOSITORY } from '../../domain/repositories/outbox-event.repository.js';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository.js';
+import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.repository.js';
 
 @Module({
   imports: [
@@ -55,6 +58,7 @@ import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-even
       InvoiceEventOrmEntity,
       AuditEventOrmEntity,
       OutboxEventOrmEntity,
+      InvoiceNoteOrmEntity,
     ]),
   ],
   providers: [
@@ -67,6 +71,7 @@ import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-even
     { provide: 'AuditEventRepository', useClass: AuditEventTypeOrmRepository },
     { provide: OUTBOX_EVENT_REPOSITORY, useClass: OutboxEventTypeOrmRepository },
     { provide: INVOICE_EVENT_REPOSITORY, useClass: InvoiceEventTypeOrmRepository },
+    { provide: INVOICE_NOTE_REPOSITORY, useClass: InvoiceNoteTypeOrmRepository },
   ],
   exports: [
     'InvoiceRepository',
@@ -76,6 +81,7 @@ import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-even
     'AuditEventRepository',
     OUTBOX_EVENT_REPOSITORY,
     INVOICE_EVENT_REPOSITORY,
+    INVOICE_NOTE_REPOSITORY,
   ],
 })
 export class DatabaseModule {}

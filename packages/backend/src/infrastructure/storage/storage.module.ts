@@ -19,7 +19,7 @@ import {
   providers: [
     {
       provide: STORAGE_TOKEN,
-      useClass: LocalStorageAdapter,
+      useFactory: () => new LocalStorageAdapter(),
     },
   ],
   exports: [STORAGE_TOKEN],

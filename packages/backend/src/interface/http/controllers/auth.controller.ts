@@ -6,7 +6,6 @@ import {
   Res,
   HttpCode,
   HttpStatus,
-  UseGuards,
   Inject,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -16,10 +15,12 @@ import { LoginUseCase } from '../../../application/use-cases/login.use-case';
 import { RefreshTokenUseCase } from '../../../application/use-cases/refresh-token.use-case';
 import { LogoutUseCase } from '../../../application/use-cases/logout.use-case';
 import { LoginInputSchema, type LoginInput } from '../../../application/dtos';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
+import { Public } from '../guards/public.decorator';
 import { CurrentUser } from '../guards/current-user.decorator';
 import type { AuthenticatedUser } from '../guards/jwt.strategy';
-import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
+
+// CurrentUser / AuthenticatedUser still used by logout handler below
 
 export const LOGIN_USE_CASE_TOKEN = 'LOGIN_USE_CASE';
 export const REFRESH_TOKEN_USE_CASE_TOKEN = 'REFRESH_TOKEN_USE_CASE';
@@ -56,6 +57,7 @@ export class AuthController {
    * to set the cookie.
    */
   @Post('login')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { limit: 5, ttl: 60000 } })
   async login(
@@ -68,21 +70,22 @@ export class AuthController {
       throw new UnauthorizedException(result.error.message);
     }
 
-    const { accessToken, refreshToken, userId, role } = result.value;
+    const { accessToken, refreshToken, userId, role, email } = result.value;
     res.cookie(REFRESH_COOKIE, refreshToken, COOKIE_OPTIONS);
-    return { data: { accessToken, userId, role } };
+    return { data: { accessToken, userId, role, email } };
   }
 
   /**
    * POST /api/v1/auth/refresh
    * Reads refreshToken from HttpOnly cookie, issues new access token.
-   * Requires a valid access token (JwtAuthGuard) so we know who is refreshing.
+   * @Public() — must bypass the global JwtAuthGuard: this endpoint is called
+   * precisely when the access token is missing or expired. The refresh token
+   * in the HttpOnly cookie is the credential; RefreshTokenUseCase validates it.
    */
   @Post('refresh')
+  @Public()
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   async refresh(
-    @CurrentUser() user: AuthenticatedUser,
     @Req() req: Request,
   ) {
     const cookies = req.cookies as Record<string, string> | undefined;
@@ -92,8 +95,22 @@ export class AuthController {
       throw new UnauthorizedException('No refresh token');
     }
 
+    // Decode the refresh token to extract userId (sub claim).
+    // RefreshTokenUseCase will re-verify the signature and validate against Redis,
+    // so decoding without verification here is safe — it's just reading the claim.
+    let userId: string;
+    try {
+      const payload = JSON.parse(
+        Buffer.from(refreshToken.split('.')[1], 'base64url').toString('utf8'),
+      ) as { sub?: string };
+      if (!payload.sub) throw new Error('missing sub');
+      userId = payload.sub;
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
     const result = await this.refreshTokenUseCase.execute({
-      userId: user.userId,
+      userId,
       refreshToken,
     });
 
@@ -111,7 +128,6 @@ export class AuthController {
    */
   @Post('logout')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @UseGuards(JwtAuthGuard)
   async logout(
     @CurrentUser() user: AuthenticatedUser,
     @Res({ passthrough: true }) res: Response,

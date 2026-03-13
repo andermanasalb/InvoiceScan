@@ -12,10 +12,10 @@ import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
 import { JobsModule } from './interface/jobs/jobs.module';
 import { AuthModule } from './interface/auth.module';
+import { JwtAuthGuard } from './interface/http/guards/jwt-auth.guard';
 import { RolesGuard } from './interface/http/guards/roles.guard';
 import { validateConfig } from './shared/config/config.schema';
 import { PROCESS_INVOICE_QUEUE } from './infrastructure/queue/invoice-queue.service';
-import { OUTBOX_POLLER_QUEUE } from './interface/jobs/outbox-poller.worker';
 
 const config = validateConfig();
 
@@ -50,11 +50,6 @@ const redisUrl = new URL(config.REDIS_URL);
       name: PROCESS_INVOICE_QUEUE,
       adapter: BullMQAdapter,
     }),
-    BullBoardModule.forFeature({
-      name: OUTBOX_POLLER_QUEUE,
-      adapter: BullMQAdapter,
-    }),
-
     DatabaseModule,
     InvoicesModule,
     JobsModule,
@@ -63,9 +58,13 @@ const redisUrl = new URL(config.REDIS_URL);
   controllers: [AppController],
   providers: [
     AppService,
-    // RolesGuard is registered globally so every route benefits from role
-    // enforcement via the @Roles() decorator. Routes without @Roles() are
-    // allowed through for any authenticated user.
+    // JwtAuthGuard runs first globally — populates request.user from the JWT.
+    // RolesGuard runs second — checks request.user.role against @Roles().
+    // Order matters: JWT must validate before roles can be checked.
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
     {
       provide: APP_GUARD,
       useClass: RolesGuard,

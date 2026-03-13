@@ -5,3 +5,4 @@ export { InvoiceOrmEntity } from './invoice.orm-entity';
 export { InvoiceEventOrmEntity } from './invoice-event.orm-entity';
 export { AuditEventOrmEntity } from './audit-event.orm-entity';
 export { OutboxEventOrmEntity } from './outbox-event.orm-entity';
+export { InvoiceNoteOrmEntity } from './invoice-note.orm-entity';

@@ -152,12 +152,47 @@ describe('Invoice', () => {
     });
   });
 
-  describe('markReadyForApproval', () => {
-    it('should transition from EXTRACTED to READY_FOR_APPROVAL', () => {
+  describe('markReadyForValidation', () => {
+    it('should transition from EXTRACTED to READY_FOR_VALIDATION', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
       invoice.markExtracted(createExtractedData({ rawText: 'text' }));
+
+      // Act
+      const result = invoice.markReadyForValidation('validator-001');
+
+      // Assert
+      expect(result.isOk()).toBe(true);
+      expect(invoice.getStatus().getValue()).toBe(
+        InvoiceStatusEnum.READY_FOR_VALIDATION,
+      );
+      expect(invoice.getValidatorId()).toBe('validator-001');
+    });
+
+    it('should return error when not in EXTRACTED status', () => {
+      // Arrange
+      const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
+      // Still in PENDING
+
+      // Act
+      const result = invoice.markReadyForValidation('validator-001');
+
+      // Assert
+      expect(result.isErr()).toBe(true);
+      expect(result._unsafeUnwrapErr()).toBeInstanceOf(
+        InvalidStateTransitionError,
+      );
+    });
+  });
+
+  describe('markReadyForApproval', () => {
+    it('should transition from READY_FOR_VALIDATION to READY_FOR_APPROVAL', () => {
+      // Arrange
+      const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
+      invoice.startProcessing();
+      invoice.markExtracted(createExtractedData({ rawText: 'text' }));
+      invoice.markReadyForValidation('validator-001');
 
       // Act
       const result = invoice.markReadyForApproval();
@@ -169,7 +204,7 @@ describe('Invoice', () => {
       );
     });
 
-    it('should return error when not in EXTRACTED status', () => {
+    it('should return error when not in READY_FOR_VALIDATION status', () => {
       // Arrange
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
 
@@ -190,6 +225,7 @@ describe('Invoice', () => {
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
       invoice.markExtracted(createExtractedData({ rawText: 'text' }));
+      invoice.markReadyForValidation('validator-001');
       invoice.markReadyForApproval();
 
       // Act
@@ -223,6 +259,7 @@ describe('Invoice', () => {
       const invoice = Invoice.create(makeValidProps())._unsafeUnwrap();
       invoice.startProcessing();
       invoice.markExtracted(createExtractedData({ rawText: 'text' }));
+      invoice.markReadyForValidation('validator-001');
       invoice.markReadyForApproval();
 
       // Act

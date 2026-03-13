@@ -5,3 +5,4 @@ export { UserCredentialTypeOrmRepository, USER_CREDENTIAL_REPOSITORY } from './u
 export { AuditEventTypeOrmRepository } from './audit-event.typeorm-repository';
 export { OutboxEventTypeOrmRepository } from './outbox-event.typeorm-repository';
 export { InvoiceEventTypeOrmRepository } from './invoice-event.typeorm-repository';
+export { InvoiceNoteTypeOrmRepository } from './invoice-note.typeorm-repository';
