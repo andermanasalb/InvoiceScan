@@ -22,6 +22,8 @@ describe('GetInvoiceUseCase', () => {
       findByUploaderId: vi.fn(),
       save: vi.fn(),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     useCase = new GetInvoiceUseCase(

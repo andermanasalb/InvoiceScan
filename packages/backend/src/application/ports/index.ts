@@ -5,3 +5,4 @@ export * from './audit.port';
 export * from './llm.port';
 export * from './token-store.port';
 export * from './event-bus.port';
+export * from './invoice-queue.port';

@@ -38,6 +38,8 @@ describe('RejectInvoiceUseCase', () => {
       findByUploaderId: vi.fn(),
       save: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     mockAudit = { record: vi.fn().mockResolvedValue(undefined) };

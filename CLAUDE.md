@@ -773,7 +773,12 @@ FASE 11 : Emails Nodemailer                   (2h)
             → Solo cambiar InvoiceApprovedHandler / InvoiceRejectedHandler
             → NodemailerAdapter implementa NotificationPort
             → Use cases y controllers NO se tocan
-FASE 12 : Export CSV/JSON                     (1h)
+FASE 12 : Export CSV/JSON + shared pkg + frontend lint  (2h)
+            → Export CSV/JSON async (existing plan)
+            → Populate packages/shared with shared Zod DTOs and types
+              consumed by both backend and frontend (eliminates desync)
+            → Add eslint-plugin-next / eslint-config-next to frontend
+              ESLint config (currently deferred — using typescript-eslint only)
 FASE 13 : Observabilidad OpenTelemetry        (3h)
             → Unit of Work atómico (T1): invoice + outbox en misma transacción
 FASE 14 : E2E Playwright + CI completo        (2h)

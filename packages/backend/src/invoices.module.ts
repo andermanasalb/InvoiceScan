@@ -25,6 +25,7 @@ import { SendToValidationUseCase } from './application/use-cases/send-to-validat
 import { RetryInvoiceUseCase } from './application/use-cases/retry-invoice.use-case';
 import { AddNoteUseCase } from './application/use-cases/add-note.use-case';
 import { GetInvoiceNotesUseCase } from './application/use-cases/get-invoice-notes.use-case';
+import { GetInvoiceStatsUseCase } from './application/use-cases/get-invoice-stats.use-case';
 
 import {
   InvoicesController,
@@ -39,6 +40,7 @@ import {
   RETRY_INVOICE_USE_CASE_TOKEN,
   ADD_NOTE_USE_CASE_TOKEN,
   GET_INVOICE_NOTES_USE_CASE_TOKEN,
+  GET_INVOICE_STATS_USE_CASE_TOKEN,
 } from './interface/http/controllers/invoices.controller';
 
 import type { InvoiceRepository } from './domain/repositories';
@@ -49,7 +51,7 @@ import type { AuditEventRepository } from './domain/repositories/audit-event.rep
 import type { StoragePort } from './application/ports/storage.port';
 import type { AuditPort } from './application/ports/audit.port';
 import type { EventBusPort } from './application/ports/event-bus.port';
-import type { InvoiceQueuePort } from './infrastructure/queue/invoice-queue.service';
+import type { InvoiceQueuePort } from './application/ports/invoice-queue.port';
 import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoice.typeorm-repository';
 
 /**
@@ -69,7 +71,8 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
  *     ├── SendToApprovalUseCase     → InvoiceRepository, AuditPort
  *     ├── RetryInvoiceUseCase       → InvoiceRepository, AuditPort, InvoiceQueuePort
  *     ├── AddNoteUseCase            → InvoiceRepository, InvoiceNoteRepository
- *     └── GetInvoiceNotesUseCase    → InvoiceRepository, InvoiceNoteRepository
+ *     ├── GetInvoiceNotesUseCase    → InvoiceRepository, InvoiceNoteRepository
+ *     └── GetInvoiceStatsUseCase    → InvoiceRepository
  *
  * AuditPort    → AuditEventTypeOrmRepository (real TypeORM impl, FASE 9)
  * EventBusPort → OutboxEventBusAdapter (saves to outbox_events, FASE 9)
@@ -243,6 +246,13 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         noteRepo: InvoiceNoteRepository,
       ) => new GetInvoiceNotesUseCase(invoiceRepo, noteRepo),
       inject: ['InvoiceRepository', INVOICE_NOTE_REPOSITORY],
+    },
+
+    {
+      provide: GET_INVOICE_STATS_USE_CASE_TOKEN,
+      useFactory: (invoiceRepo: InvoiceRepository) =>
+        new GetInvoiceStatsUseCase(invoiceRepo),
+      inject: ['InvoiceRepository'],
     },
   ],
 })

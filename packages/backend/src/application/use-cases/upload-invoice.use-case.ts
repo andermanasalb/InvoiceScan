@@ -1,13 +1,29 @@
+/**
+ * UploadInvoiceUseCase
+ *
+ * Caso de uso responsable de recibir un PDF de factura, persistirlo en storage,
+ * crear la entidad Invoice en estado PENDING y encolar el job de procesamiento OCR.
+ *
+ * Flujo:
+ *   1. Validar providerId (no vacío).
+ *   2. Guardar el PDF en storage (genera UUID como nombre de archivo).
+ *   3. Crear la entidad Invoice con amount y date provisionales.
+ *   4. Persistir la factura en el repositorio.
+ *   5. Encolar el job OCR en BullMQ (via InvoiceQueuePort).
+ *   6. Registrar la acción en el audit log.
+ *
+ * Los valores de amount y date son placeholders que el worker de OCR
+ * actualizará al completar la extracción (estado → EXTRACTED).
+ */
 import { ok, err, Result } from 'neverthrow';
 import { randomUUID } from 'crypto';
 import { InvoiceRepository } from '../../domain/repositories';
-import { StoragePort, AuditPort } from '../ports';
+import { StoragePort, AuditPort, InvoiceQueuePort } from '../ports';
 import { UploadInvoiceInput, UploadInvoiceOutput } from '../dtos';
 import { Invoice } from '../../domain/entities';
 import { InvoiceAmount, InvoiceDate } from '../../domain/value-objects';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvalidFieldError } from '../../domain/errors';
-import type { InvoiceQueuePort } from '../../infrastructure/queue/invoice-queue.service';
 
 export class UploadInvoiceUseCase {
   constructor(
@@ -26,7 +42,7 @@ export class UploadInvoiceUseCase {
       );
     }
 
-    // Default amount and date — will be replaced after OCR in FASE 5
+    // Placeholder: amount y date se actualizan tras el OCR (worker process-invoice)
     const amount = InvoiceAmount.createPlaceholder();
 
     const dateResult = InvoiceDate.create(new Date());

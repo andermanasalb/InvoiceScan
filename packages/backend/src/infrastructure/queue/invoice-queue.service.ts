@@ -1,14 +1,23 @@
+/**
+ * InvoiceQueueService
+ *
+ * Implementación de InvoiceQueuePort usando BullMQ.
+ * Encola jobs de procesamiento OCR en la cola 'process-invoice'.
+ *
+ * Idempotencia:
+ * - enqueueProcessing usa jobId = invoiceId → BullMQ descarta duplicados.
+ * - enqueueRetry usa jobId = invoiceId + timestamp → evita colisión con el
+ *   job original que puede seguir en estado 'failed' con el mismo jobId.
+ *
+ * Configuración de reintentos: 3 intentos con backoff exponencial (2s base).
+ */
 import { Injectable } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { InvoiceQueuePort } from '../../application/ports/invoice-queue.port';
 
 export const PROCESS_INVOICE_QUEUE = 'process-invoice';
 export const INVOICE_QUEUE_SERVICE_TOKEN = 'InvoiceQueueService';
-
-export interface InvoiceQueuePort {
-  enqueueProcessing(invoiceId: string): Promise<void>;
-  enqueueRetry(invoiceId: string): Promise<void>;
-}
 
 @Injectable()
 export class InvoiceQueueService implements InvoiceQueuePort {

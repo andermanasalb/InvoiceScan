@@ -1,3 +1,13 @@
+/**
+ * @file Root layout for the InvoiceScan Next.js application.
+ *
+ * Wraps every page with:
+ * - Geist / Geist Mono variable fonts
+ * - Dark-mode HTML root
+ * - Global providers (React Query, AuthContext)
+ * - Sonner toast notifications
+ * - Vercel Analytics (no-op in non-Vercel environments)
+ */
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
@@ -17,7 +27,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: 'InvoiceScan - Invoice Automation Platform',
   description: 'Automated invoice processing and approval workflow',
-  generator: 'v0.app',
   icons: {
     icon: [
       {

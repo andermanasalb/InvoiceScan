@@ -1,3 +1,14 @@
+/**
+ * @file Axios instance and API helpers.
+ *
+ * Centralises all HTTP calls to the backend, including:
+ *   - silent JWT refresh via response interceptors
+ *   - rate-limit toast notifications
+ *   - typed `authApi` and `invoiceApi` namespaces
+ *
+ * The access token is kept in-memory only (never in localStorage) and injected
+ * into every request via the request interceptor.
+ */
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { toast } from 'sonner';
 
@@ -182,6 +193,11 @@ export const invoiceApi = {
         'Content-Type': 'multipart/form-data',
       },
     });
+    return response.data;
+  },
+
+  stats: async (): Promise<{ data: Record<string, number> }> => {
+    const response = await api.get('/invoices/stats');
     return response.data;
   },
 };

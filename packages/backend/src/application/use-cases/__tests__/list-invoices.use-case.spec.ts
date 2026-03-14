@@ -24,6 +24,8 @@ describe('ListInvoicesUseCase', () => {
       findByUploaderId: vi.fn().mockResolvedValue(paginatedResult()),
       save: vi.fn(),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     useCase = new ListInvoicesUseCase(mockRepo);

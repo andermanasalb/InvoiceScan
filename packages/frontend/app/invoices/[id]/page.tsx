@@ -1,9 +1,20 @@
+/**
+ * @file Invoice detail page.
+ *
+ * Displays full metadata for a single invoice, its status stepper, extracted
+ * data, action buttons (approve / reject / send-to-validation / retry), and
+ * an event-history timeline in the right sidebar.
+ *
+ * Notes are rendered by the <InvoiceNotes> component (extracted from this file).
+ * Role/ownership permission flags come from the useInvoicePermissions hook.
+ * Currency formatting uses the shared formatAmount() util from @/lib/utils.
+ */
 'use client';
 
 import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { format, isValid, formatDistanceToNow } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { motion } from 'framer-motion';
 import { 
   ChevronLeft, 
@@ -17,7 +28,6 @@ import {
   Upload,
   Send,
   RefreshCw,
-  MessageSquare,
   Loader2,
   Hash,
   Receipt,
@@ -31,14 +41,15 @@ import { StatusStepper } from '@/components/invoices/status-stepper';
 import { InvoiceEventTimeline } from '@/components/invoices/invoice-event-timeline';
 import { ApproveDialog } from '@/components/invoices/approve-dialog';
 import { RejectModal } from '@/components/invoices/reject-modal';
+import { InvoiceNotes } from '@/components/invoices/invoice-notes';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Textarea } from '@/components/ui/textarea';
 import { useInvoice } from '@/hooks/use-invoice';
 import { useInvoiceEvents } from '@/hooks/use-invoice-events';
-import { useInvoiceNotes } from '@/hooks/use-invoice-notes';
-import { useApproveInvoice, useRejectInvoice, useSendToApproval, useSendToValidation, useRetryInvoice, useAddNote } from '@/hooks/use-invoice-mutations';
+import { useApproveInvoice, useRejectInvoice, useSendToApproval, useSendToValidation, useRetryInvoice } from '@/hooks/use-invoice-mutations';
+import { useInvoicePermissions } from '@/hooks/use-invoice-permissions';
 import { useAuth } from '@/context/auth-context';
 import { formatProviderName } from '@/types/invoice';
+import { formatAmount } from '@/lib/utils';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -47,55 +58,23 @@ export default function InvoiceDetailPage() {
 
   const { data: invoice, isLoading: isLoadingInvoice, isError: isInvoiceError } = useInvoice(invoiceId);
   const { data: events = [], isLoading: isLoadingEvents } = useInvoiceEvents(invoiceId, invoice?.status);
-  const { data: notes = [], isLoading: isLoadingNotes } = useInvoiceNotes(invoiceId);
 
   const approveMutation = useApproveInvoice();
   const rejectMutation = useRejectInvoice();
   const sendToApprovalMutation = useSendToApproval();
   const sendToValidationMutation = useSendToValidation();
   const retryMutation = useRetryInvoice();
-  const addNoteMutation = useAddNote();
 
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [noteContent, setNoteContent] = useState('');
 
-  // Ownership: uploader cannot act on their own invoice (except admin)
-  const isOwner = !!userId && invoice?.uploaderId === userId;
-  const isAdmin = role === 'admin';
-  // The person who sent to validation cannot also send to approval
-  const isValidator = !!userId && invoice?.validatorId === userId;
-
-  const canApprove = (role === 'approver' || role === 'admin') &&
-                     invoice?.status === 'READY_FOR_APPROVAL' &&
-                     (isAdmin || (!isOwner && !isValidator));
-
-  // Step 1: EXTRACTED → READY_FOR_VALIDATION
-  // The uploader reviews AI-extracted data and sends it to validation (their OWN invoice)
-  // Validator/approver/admin can also do this on invoices they don't own
-  const canSendToValidation = invoice?.status === 'EXTRACTED' && (
-    isAdmin ||
-    (role === 'uploader' && isOwner) ||
-    ((role === 'validator' || role === 'approver') && !isOwner)
-  );
-
-  // Step 2: READY_FOR_VALIDATION → READY_FOR_APPROVAL (approver/admin only, not the validator who validated)
-  const canSendToApproval = (role === 'approver' || role === 'admin') &&
-                             invoice?.status === 'READY_FOR_VALIDATION' &&
-                             (isAdmin || (!isOwner && !isValidator));
-
-  const canRetry = (role === 'validator' || role === 'approver' || role === 'admin') &&
-                   invoice?.status === 'VALIDATION_FAILED';
-
-  const canAddNote = role === 'validator' || role === 'approver' || role === 'admin';
-
-  const formatAmount = (amount: number | null | undefined) => {
-    if (amount == null) return '—';
-    return new Intl.NumberFormat('de-DE', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount);
-  };
+  const {
+    canApprove,
+    canSendToValidation,
+    canSendToApproval,
+    canRetry,
+    canAddNote,
+  } = useInvoicePermissions({ invoice, role, userId });
 
   const confirmApprove = async () => {
     await approveMutation.mutateAsync(invoiceId);
@@ -105,12 +84,6 @@ export default function InvoiceDetailPage() {
   const confirmReject = async (reason: string) => {
     await rejectMutation.mutateAsync({ id: invoiceId, reason });
     setRejectModalOpen(false);
-  };
-
-  const handleSubmitNote = async () => {
-    if (!noteContent.trim()) return;
-    await addNoteMutation.mutateAsync({ id: invoiceId, content: noteContent.trim() });
-    setNoteContent('');
   };
 
   return (
@@ -411,72 +384,7 @@ export default function InvoiceDetailPage() {
           </motion.div>
 
           {/* Notes section — visible to validator/approver/admin */}
-          {canAddNote && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.15 }}
-              className="rounded-xl border border-zinc-800 bg-zinc-900 p-6"
-            >
-              <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-50">
-                <MessageSquare className="h-5 w-5 text-zinc-400" />
-                Notes
-              </h3>
-
-              {/* Existing notes */}
-              {isLoadingNotes ? (
-                <div className="mb-4 space-y-3">
-                  <Skeleton className="h-16 w-full" />
-                  <Skeleton className="h-16 w-full" />
-                </div>
-              ) : notes.length > 0 ? (
-                <div className="mb-4 space-y-3">
-                  {notes.map((note) => (
-                    <div
-                      key={note.noteId}
-                      className="rounded-lg border border-zinc-800 bg-zinc-800/50 p-4"
-                    >
-                      <p className="mb-2 text-sm text-zinc-200">{note.content}</p>
-                      <p className="text-xs text-zinc-500">
-                        {note.authorId.slice(0, 8)}... ·{' '}
-                        {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="mb-4 text-sm text-zinc-500">No notes yet.</p>
-              )}
-
-              {/* Add note form */}
-              <div className="space-y-3">
-                <Textarea
-                  placeholder="Add a note..."
-                  value={noteContent}
-                  onChange={(e) => setNoteContent(e.target.value)}
-                  className="resize-none border-zinc-700 bg-zinc-800 text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500"
-                  rows={3}
-                  maxLength={2000}
-                />
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-zinc-600">{noteContent.length}/2000</span>
-                  <Button
-                    onClick={handleSubmitNote}
-                    disabled={!noteContent.trim() || addNoteMutation.isPending}
-                    size="sm"
-                    className="bg-indigo-600 text-white hover:bg-indigo-700"
-                  >
-                    {addNoteMutation.isPending ? (
-                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Send className="mr-2 h-3.5 w-3.5" />
-                    )}
-                    Add Note
-                  </Button>
-                </div>
-              </div>
-            </motion.div>
-          )}
+          {canAddNote && <InvoiceNotes invoiceId={invoiceId} />}
         </div>
 
         {/* Right column - Event Timeline */}

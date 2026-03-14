@@ -1,3 +1,12 @@
+/**
+ * @file Invoice list page.
+ *
+ * Displays a filterable, paginated table of all invoices visible to the
+ * authenticated user (uploaders see only their own; other roles see all).
+ *
+ * Filter state (status, sort, page) is kept in the URL search params so that
+ * browser back/forward navigation and deep links work correctly.
+ */
 'use client';
 
 import { useState, Suspense } from 'react';

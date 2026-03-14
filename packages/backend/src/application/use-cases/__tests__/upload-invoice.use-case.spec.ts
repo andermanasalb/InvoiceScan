@@ -5,7 +5,7 @@ import { StoragePort } from '../../ports';
 import { AuditPort } from '../../ports';
 import { UploadInvoiceInput } from '../../dtos';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
-import type { InvoiceQueuePort } from '../../../infrastructure/queue/invoice-queue.service';
+import type { InvoiceQueuePort } from '../../../application/ports/invoice-queue.port';
 
 const makeInput = (
   overrides?: Partial<UploadInvoiceInput>,
@@ -32,6 +32,8 @@ describe('UploadInvoiceUseCase', () => {
       findByUploaderId: vi.fn(),
       save: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     mockStorage = {

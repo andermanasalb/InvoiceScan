@@ -1,3 +1,15 @@
+/**
+ * @file Login page.
+ *
+ * Renders the sign-in form with email/password fields and a collapsible
+ * "Demo credentials" panel pre-filled with one entry per role.
+ *
+ * Handles:
+ *   - Form validation via react-hook-form
+ *   - 401 (wrong credentials) and 429 (rate limit) error states
+ *   - Countdown timer displayed while the rate-limit window is active
+ *   - Redirect to /dashboard when the user is already authenticated
+ */
 'use client';
 
 import { useState, useEffect } from 'react';

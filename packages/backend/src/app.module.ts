@@ -1,3 +1,17 @@
+/**
+ * AppModule — módulo raíz de la aplicación NestJS.
+ *
+ * Responsabilidades:
+ * - Registrar guards globales (JwtAuthGuard → RolesGuard, en ese orden).
+ * - Importar módulos de infraestructura transversal: ConfigModule, BullMQ,
+ *   EventEmitter y DatabaseModule.
+ * - Montar Bull Board UI de monitoreo de colas SOLO en entornos no-producción.
+ *
+ * Nota sobre el orden de guards:
+ *   JwtAuthGuard corre primero (pobla request.user desde el JWT).
+ *   RolesGuard corre segundo (verifica request.user.role contra @Roles()).
+ *   Si se invirtiese el orden, RolesGuard no tendría usuario que comprobar.
+ */
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -23,9 +37,27 @@ const config = validateConfig();
 // Formato esperado: redis://localhost:6379
 const redisUrl = new URL(config.REDIS_URL);
 
+/**
+ * Bull Board solo se monta fuera de producción.
+ * En producción la ruta /admin/queues no existe — no hay superficie de ataque.
+ */
+const bullBoardModules =
+  config.NODE_ENV !== 'production'
+    ? [
+        BullBoardModule.forRoot({
+          route: '/admin/queues',
+          adapter: ExpressAdapter,
+        }),
+        BullBoardModule.forFeature({
+          name: PROCESS_INVOICE_QUEUE,
+          adapter: BullMQAdapter,
+        }),
+      ]
+    : [];
+
 @Module({
   imports: [
-    // Make ConfigService available for injection everywhere (e.g. JwtStrategy, AIStudioAdapter)
+    // ConfigService disponible globalmente (JwtStrategy, AIStudioAdapter, etc.)
     ConfigModule.forRoot({ isGlobal: true }),
 
     // Bus de eventos in-process. Los handlers (@OnEvent) escuchan aquí.
@@ -40,16 +72,9 @@ const redisUrl = new URL(config.REDIS_URL);
       },
     }),
 
-    // Bull Board — UI de monitoreo de colas
-    // Solo activo en desarrollo: en producción no se monta el router
-    BullBoardModule.forRoot({
-      route: '/admin/queues',
-      adapter: ExpressAdapter,
-    }),
-    BullBoardModule.forFeature({
-      name: PROCESS_INVOICE_QUEUE,
-      adapter: BullMQAdapter,
-    }),
+    // Bull Board UI — solo activo fuera de producción
+    ...bullBoardModules,
+
     DatabaseModule,
     InvoicesModule,
     JobsModule,

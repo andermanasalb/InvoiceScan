@@ -28,6 +28,7 @@ import { RetryInvoiceUseCase } from '../../../application/use-cases/retry-invoic
 import { AddNoteUseCase } from '../../../application/use-cases/add-note.use-case';
 import { GetInvoiceNotesUseCase } from '../../../application/use-cases/get-invoice-notes.use-case';
 import { SendToValidationUseCase } from '../../../application/use-cases/send-to-validation.use-case';
+import { GetInvoiceStatsUseCase } from '../../../application/use-cases/get-invoice-stats.use-case';
 import { FileValidationPipe } from '../pipes/file-validation.pipe';
 import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
 import { Roles } from '../guards/roles.decorator';
@@ -49,6 +50,8 @@ export const RETRY_INVOICE_USE_CASE_TOKEN = 'RETRY_INVOICE_USE_CASE_TOKEN';
 export const ADD_NOTE_USE_CASE_TOKEN = 'ADD_NOTE_USE_CASE_TOKEN';
 export const GET_INVOICE_NOTES_USE_CASE_TOKEN =
   'GET_INVOICE_NOTES_USE_CASE_TOKEN';
+export const GET_INVOICE_STATS_USE_CASE_TOKEN =
+  'GET_INVOICE_STATS_USE_CASE_TOKEN';
 
 /**
  * HTTP-layer query schema for GET /invoices.
@@ -122,6 +125,8 @@ export class InvoicesController {
     private readonly addNoteUseCase: AddNoteUseCase,
     @Inject(GET_INVOICE_NOTES_USE_CASE_TOKEN)
     private readonly getInvoiceNotesUseCase: GetInvoiceNotesUseCase,
+    @Inject(GET_INVOICE_STATS_USE_CASE_TOKEN)
+    private readonly getInvoiceStatsUseCase: GetInvoiceStatsUseCase,
   ) {}
 
   /**
@@ -217,6 +222,34 @@ export class InvoicesController {
     return {
       data: items,
       meta: { total, page, limit },
+    };
+  }
+
+  /**
+   * GET /api/v1/invoices/stats
+   *
+   * Returns invoice counts grouped by status in a single DB query.
+   * - uploaders  → counts only their own invoices
+   * - all others → counts across all invoices in the system
+   *
+   * IMPORTANT: this route must be declared BEFORE @Get(':id') so that NestJS
+   * does not interpret the literal string "stats" as an :id parameter value.
+   */
+  @Get('stats')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  @HttpCode(HttpStatus.OK)
+  async getStats(@CurrentUser() user: AuthenticatedUser) {
+    const result = await this.getInvoiceStatsUseCase.execute({
+      requesterId: user.userId,
+      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    return {
+      data: result.value,
     };
   }
 

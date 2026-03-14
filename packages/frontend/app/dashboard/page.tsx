@@ -1,3 +1,15 @@
+/**
+ * @file Dashboard page
+ *
+ * Shows an overview of invoice activity for the authenticated user:
+ *   - action banners for roles that have pending work
+ *   - stat cards (total, pending approval / awaiting review, approved, rejected)
+ *   - a chart section summarising the recent invoice distribution
+ *   - a "Recent Activity" table of the 10 most recent invoices
+ *
+ * Stats are fetched in a single GET /invoices/stats request (one GROUP BY
+ * query on the backend) rather than four separate status-filtered requests.
+ */
 'use client';
 
 import Link from 'next/link';
@@ -17,6 +29,7 @@ import { InvoiceTable } from '@/components/invoices/invoice-table';
 import { SkeletonTable, SkeletonCard } from '@/components/ui/skeleton-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { useInvoices } from '@/hooks/use-invoices';
+import { useInvoiceStats } from '@/hooks/use-invoice-stats';
 import { useAuth } from '@/context/auth-context';
 import { InvoiceCharts } from '@/components/dashboard/invoice-charts';
 import { useSendToApproval } from '@/hooks/use-invoice-mutations';
@@ -27,20 +40,17 @@ export default function DashboardPage() {
   // Fetch the 10 most recent invoices for the Recent Activity table + charts
   const { data, isLoading } = useInvoices({ limit: 10 });
 
-  // Fetch accurate counts per status using limit:1 (only meta.total matters)
-  const { data: pendingData, isLoading: isLoadingPending } = useInvoices({ status: 'READY_FOR_APPROVAL', limit: 1 });
-  const { data: approvedData, isLoading: isLoadingApproved } = useInvoices({ status: 'APPROVED', limit: 1 });
-  const { data: rejectedData, isLoading: isLoadingRejected } = useInvoices({ status: 'REJECTED', limit: 1 });
-  const { data: extractedData, isLoading: isLoadingExtracted } = useInvoices({ status: 'EXTRACTED', limit: 1 });
+  // Single request → backend GROUP BY status (replaces 4× useInvoices calls)
+  const { data: statsData, isLoading: isStatsLoading } = useInvoiceStats();
 
   const invoices = data?.data ?? [];
-  const isStatsLoading = isLoading || isLoadingPending || isLoadingApproved || isLoadingRejected || isLoadingExtracted;
+  const stats = statsData ?? {};
 
-  const total = data?.meta?.total ?? 0;
-  const pendingApproval = pendingData?.meta?.total ?? 0;
-  const approvedCount = approvedData?.meta?.total ?? 0;
-  const rejectedCount = rejectedData?.meta?.total ?? 0;
-  const extractedCount = extractedData?.meta?.total ?? 0;
+  const total = Object.values(stats).reduce((sum, n) => sum + n, 0);
+  const pendingApproval = stats['READY_FOR_APPROVAL'] ?? 0;
+  const approvedCount = stats['APPROVED'] ?? 0;
+  const rejectedCount = stats['REJECTED'] ?? 0;
+  const extractedCount = stats['EXTRACTED'] ?? 0;
 
   const canApprove = role === 'approver' || role === 'admin';
   const canReview = role === 'validator' || role === 'approver' || role === 'admin';

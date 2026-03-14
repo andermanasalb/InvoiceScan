@@ -42,6 +42,8 @@ describe('GetInvoiceEventsUseCase', () => {
       findByUploaderId: vi.fn(),
       save: vi.fn(),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     mockEventRepo = {

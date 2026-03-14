@@ -11,7 +11,7 @@ import {
   RetryInvoiceInput,
   RetryInvoiceOutput,
 } from '../dtos/retry-invoice.dto';
-import type { InvoiceQueuePort } from '../../infrastructure/queue/invoice-queue.service';
+import type { InvoiceQueuePort } from '../ports/invoice-queue.port';
 
 export class RetryInvoiceUseCase {
   constructor(

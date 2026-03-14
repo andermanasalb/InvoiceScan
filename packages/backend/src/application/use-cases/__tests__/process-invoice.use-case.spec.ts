@@ -39,6 +39,8 @@ describe('ProcessInvoiceUseCase', () => {
       findByUploaderId: vi.fn(),
       save: vi.fn().mockResolvedValue(undefined),
       delete: vi.fn(),
+      countByStatus: vi.fn(),
+      countByStatusForUploader: vi.fn(),
     };
 
     mockStorage = {

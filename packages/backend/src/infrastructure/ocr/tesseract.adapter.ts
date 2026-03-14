@@ -1,19 +1,25 @@
+/**
+ * @file TesseractAdapter
+ *
+ * Alternate OcrPort implementation using tesseract.js (image/scanned PDFs).
+ *
+ * NOT currently registered in any NestJS module — the active implementation is
+ * PdfParseAdapter (pdf-parse.adapter.ts), which handles text-embedded PDFs without
+ * native dependencies.
+ *
+ * Activate by swapping the OcrPort provider in InvoicesModule / JobsModule when
+ * support for scanned, image-only PDFs is required.
+ */
 import { ok, err, Result } from 'neverthrow';
 import { createWorker } from 'tesseract.js';
 import { OcrPort, OcrResult } from '../../application/ports/ocr.port';
 import { OcrError } from '../../domain/errors/ocr.errors';
 
-/**
- * TesseractAdapter
- *
- * Implementación de OcrPort usando tesseract.js.
- *
- * Crea un worker de Tesseract por cada llamada, ejecuta el OCR sobre el
- * buffer recibido (que puede ser un PDF directamente) y termina el worker
- * al finalizar, tanto en caso de éxito como de error.
- *
- * Idiomas: español ('spa') + inglés ('eng') — cubre la mayoría de facturas.
- */
+// NOTE: OCR_TOKEN is intentionally NOT exported from this file.
+// The canonical token lives in pdf-parse.adapter.ts (the active OcrPort impl).
+// Exporting it here too would create a duplicate-export collision if both files
+// are imported in the same module context.
+
 const OCR_TIMEOUT_MS = 60_000;
 
 export class TesseractAdapter implements OcrPort {
@@ -45,4 +51,4 @@ export class TesseractAdapter implements OcrPort {
   }
 }
 
-export const OCR_TOKEN = 'OcrPort';
+// OCR_TOKEN deliberately not exported — see file-level comment above.
