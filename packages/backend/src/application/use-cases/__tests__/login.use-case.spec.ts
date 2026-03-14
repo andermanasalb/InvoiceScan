@@ -6,11 +6,13 @@ import { TokenStorePort } from '../../ports/token-store.port';
 import { createUser } from '../../../domain/test/factories';
 
 // Mock bcrypt — avoid real hashing in unit tests
-vi.mock('bcrypt', () => ({
-  compare: vi.fn(),
-}));
+// The default key is required because the use-case uses `import bcrypt from 'bcrypt'`
+vi.mock('bcrypt', () => {
+  const mock = { compare: vi.fn() };
+  return { default: mock, ...mock };
+});
 
-import * as bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 
 describe('LoginUseCase', () => {
   let userRepo: UserRepository;

@@ -6,9 +6,11 @@ import { createUser } from '../../../domain/test/factories';
 import { UserRole } from '../../../domain/entities/user.entity';
 
 // Mock bcrypt so tests don't actually hash passwords (slow + non-deterministic)
-vi.mock('bcrypt', () => ({
-  hash: vi.fn().mockResolvedValue('hashed_password_mock'),
-}));
+// The default key is required because the use-case uses `import bcrypt from 'bcrypt'`
+vi.mock('bcrypt', () => {
+  const mock = { hash: vi.fn().mockResolvedValue('hashed_password_mock') };
+  return { default: mock, ...mock };
+});
 
 describe('CreateUserUseCase', () => {
   let mockUserRepo: UserRepository;
