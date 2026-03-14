@@ -29,14 +29,16 @@ export interface Invoice {
   status: InvoiceStatus;
   uploaderId: string;
   uploaderEmail: string | null;
+  validatorId: string | null;
+  validatorEmail: string | null;
+  approverId: string | null;
+  approverEmail: string | null;
   providerId: string;
   vendorName: string | null;   // vendor name from extractedData (list response)
   filePath: string;
   amount: number;
   date: string;        // invoice date ISO string
   createdAt: string;
-  validatorId: string | null;
-  approverId: string | null;
   rejectionReason: string | null;
   validationErrors: string[];
   extractedData: InvoiceExtractedData | null;

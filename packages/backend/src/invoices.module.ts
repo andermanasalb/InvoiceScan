@@ -41,6 +41,7 @@ import {
   ADD_NOTE_USE_CASE_TOKEN,
   GET_INVOICE_NOTES_USE_CASE_TOKEN,
   GET_INVOICE_STATS_USE_CASE_TOKEN,
+  INVOICE_STORAGE_TOKEN,
 } from './interface/http/controllers/invoices.controller';
 
 import type { InvoiceRepository } from './domain/repositories';
@@ -138,8 +139,8 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
     {
       provide: GET_INVOICE_USE_CASE_TOKEN,
       useFactory: (invoiceRepo: InvoiceTypeOrmRepository) =>
-        new GetInvoiceUseCase(invoiceRepo, (uploaderId: string) =>
-          invoiceRepo.findUploaderEmail(uploaderId),
+        new GetInvoiceUseCase(invoiceRepo, (userId: string) =>
+          invoiceRepo.findUploaderEmail(userId),
         ),
       inject: ['InvoiceRepository'],
     },
@@ -259,6 +260,12 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         assignmentRepo: AssignmentRepository,
       ) => new GetInvoiceStatsUseCase(invoiceRepo, assignmentRepo),
       inject: ['InvoiceRepository', ASSIGNMENT_REPOSITORY],
+    },
+
+    // Storage port — passed directly to controller for the file-download endpoint.
+    {
+      provide: INVOICE_STORAGE_TOKEN,
+      useExisting: STORAGE_TOKEN,
     },
   ],
 })

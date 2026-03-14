@@ -200,6 +200,12 @@ export const invoiceApi = {
     const response = await api.get('/invoices/stats');
     return response.data;
   },
+
+  /** Fetches the original PDF as a Blob (auth handled by interceptor). */
+  getFile: async (id: string): Promise<Blob> => {
+    const response = await api.get(`/invoices/${id}/file`, { responseType: 'blob' });
+    return response.data as Blob;
+  },
 };
 
 // Admin API functions (admin role only)

@@ -32,6 +32,8 @@ import {
   Hash,
   Receipt,
   FileDigit,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
@@ -51,6 +53,7 @@ import { useInvoicePermissions } from '@/hooks/use-invoice-permissions';
 import { useAuth } from '@/context/auth-context';
 import { formatProviderName } from '@/types/invoice';
 import { formatAmount } from '@/lib/utils';
+import { invoiceApi } from '@/lib/api';
 
 export default function InvoiceDetailPage() {
   const params = useParams();
@@ -66,9 +69,27 @@ export default function InvoiceDetailPage() {
   const sendToValidationMutation = useSendToValidation();
   const retryMutation = useRetryInvoice();
 
+  const isOwner = !!userId && invoice?.uploaderId === userId;
+
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
   const [sendToApprovalModalOpen, setSendToApprovalModalOpen] = useState(false);
+  const [isPdfLoading, setIsPdfLoading] = useState(false);
+
+  const handleViewPdf = async () => {
+    setIsPdfLoading(true);
+    try {
+      const blob = await invoiceApi.getFile(invoiceId);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      // Revoke after a delay to allow the tab to load it
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      // silently fail — unlikely since auth is already verified
+    } finally {
+      setIsPdfLoading(false);
+    }
+  };
 
   const {
     canApprove,
@@ -135,6 +156,22 @@ export default function InvoiceDetailPage() {
                       <StatusBadge status={invoice.status} size="lg" />
                     </div>
                   </div>
+                  {/* View original PDF */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleViewPdf}
+                    disabled={isPdfLoading}
+                    className="shrink-0 border-zinc-700 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                  >
+                    {isPdfLoading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="mr-2 h-4 w-4" />
+                    )}
+                    View PDF
+                    <ExternalLink className="ml-2 h-3.5 w-3.5 text-zinc-500" />
+                  </Button>
                 </div>
 
                 {/* Status Stepper */}
@@ -159,6 +196,36 @@ export default function InvoiceDetailPage() {
                     </div>
                     <p className="text-sm text-zinc-200 truncate">
                       {invoice.uploaderEmail ?? invoice.uploaderId.slice(0, 8) + '…'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-zinc-800/50 p-4">
+                    <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-zinc-500">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      Validator
+                    </div>
+                    <p className="text-sm text-zinc-200 truncate">
+                      {invoice.validatorEmail
+                        ? invoice.validatorEmail
+                        : invoice.validatorId
+                          ? invoice.validatorId.slice(0, 8) + '…'
+                          : <span className="text-zinc-600">Not yet assigned</span>
+                      }
+                    </p>
+                  </div>
+
+                  <div className="rounded-lg bg-zinc-800/50 p-4">
+                    <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-zinc-500">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-amber-500/60" />
+                      Approver
+                    </div>
+                    <p className="text-sm text-zinc-200 truncate">
+                      {invoice.approverEmail
+                        ? invoice.approverEmail
+                        : invoice.approverId
+                          ? invoice.approverId.slice(0, 8) + '…'
+                          : <span className="text-zinc-600">Not yet assigned</span>
+                      }
                     </p>
                   </div>
 
@@ -392,8 +459,10 @@ export default function InvoiceDetailPage() {
             )}
           </motion.div>
 
-          {/* Notes section — visible to validator/approver/admin */}
-          {canAddNote && <InvoiceNotes invoiceId={invoiceId} />}
+          {/* Notes — full form for validator/approver/admin; read-only for uploader */}
+          {(canAddNote || isOwner) && (
+            <InvoiceNotes invoiceId={invoiceId} readOnly={!canAddNote} />
+          )}
         </div>
 
         {/* Right column - Event Timeline */}

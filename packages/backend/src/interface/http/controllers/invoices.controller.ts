@@ -11,9 +11,12 @@ import {
   Patch,
   Post,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { z } from 'zod';
@@ -29,6 +32,7 @@ import { AddNoteUseCase } from '../../../application/use-cases/add-note.use-case
 import { GetInvoiceNotesUseCase } from '../../../application/use-cases/get-invoice-notes.use-case';
 import { SendToValidationUseCase } from '../../../application/use-cases/send-to-validation.use-case';
 import { GetInvoiceStatsUseCase } from '../../../application/use-cases/get-invoice-stats.use-case';
+import type { StoragePort } from '../../../application/ports/storage.port';
 import { FileValidationPipe } from '../pipes/file-validation.pipe';
 import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
 import { Roles } from '../guards/roles.decorator';
@@ -52,6 +56,7 @@ export const GET_INVOICE_NOTES_USE_CASE_TOKEN =
   'GET_INVOICE_NOTES_USE_CASE_TOKEN';
 export const GET_INVOICE_STATS_USE_CASE_TOKEN =
   'GET_INVOICE_STATS_USE_CASE_TOKEN';
+export const INVOICE_STORAGE_TOKEN = 'INVOICE_STORAGE_TOKEN';
 
 /**
  * HTTP-layer query schema for GET /invoices.
@@ -127,6 +132,8 @@ export class InvoicesController {
     private readonly getInvoiceNotesUseCase: GetInvoiceNotesUseCase,
     @Inject(GET_INVOICE_STATS_USE_CASE_TOKEN)
     private readonly getInvoiceStatsUseCase: GetInvoiceStatsUseCase,
+    @Inject(INVOICE_STORAGE_TOKEN)
+    private readonly storage: StoragePort,
   ) {}
 
   /**
@@ -474,6 +481,46 @@ export class InvoicesController {
   }
 
   /**
+   * GET /api/v1/invoices/:id/file
+   *
+   * Streams the original PDF for an invoice.
+   * - uploaders can only download their own invoices
+   * - validator / approver / admin can download any invoice
+   */
+  @Get(':id/file')
+  @Roles('uploader', 'validator', 'approver', 'admin')
+  async getFile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') invoiceId: string,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<StreamableFile> {
+    const result = await this.getInvoiceUseCase.execute({
+      invoiceId,
+      requesterId: user.userId,
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
+    });
+
+    if (result.isErr()) {
+      throw result.error;
+    }
+
+    const invoice = result.value;
+    const buffer = await this.storage.get(invoice.filePath);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `inline; filename="invoice-${invoiceId}.pdf"`,
+      'Content-Length': buffer.length,
+    });
+
+    return new StreamableFile(buffer);
+  }
+
+  /**
    * GET /api/v1/invoices/:id/notes
    *
    * Returns all notes for a single invoice, ordered chronologically.
@@ -501,8 +548,15 @@ export class InvoicesController {
       throw result.error;
     }
 
+    // Map domain InvoiceNote (has `id`) to the shape the frontend expects (`noteId`).
     return {
-      data: result.value,
+      data: result.value.map((note) => ({
+        noteId: note.id,
+        invoiceId: note.invoiceId,
+        authorId: note.authorId,
+        content: note.content,
+        createdAt: note.createdAt,
+      })),
     };
   }
 

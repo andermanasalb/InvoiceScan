@@ -15,6 +15,7 @@ const ExtractedDataOutputSchema = z.object({
   nifEmisor: z.string().nullable(),
   baseImponible: z.number().nullable(),
   iva: z.number().nullable(),
+  ivaPorcentaje: z.number().nullable(),
 });
 
 export const GetInvoiceOutputSchema = z.object({
@@ -28,7 +29,9 @@ export const GetInvoiceOutputSchema = z.object({
   date: z.date(),
   createdAt: z.date(),
   validatorId: z.string().nullable(),
+  validatorEmail: z.string().nullable(),
   approverId: z.string().nullable(),
+  approverEmail: z.string().nullable(),
   rejectionReason: z.string().nullable(),
   validationErrors: z.array(z.string()),
   extractedData: ExtractedDataOutputSchema.nullable(),

@@ -1,11 +1,11 @@
 /**
  * @file InvoiceNotes component.
  *
- * Renders the notes section on the invoice detail page: existing notes
- * (with loading skeletons) and a textarea form to add a new note.
- *
- * Only displayed for users with the validator / approver / admin role —
- * the parent page is responsible for gating visibility via `canAddNote`.
+ * Renders notes for an invoice.
+ *   - When readOnly=false (default): shows existing notes + add-note form.
+ *     Used for validator / approver / admin.
+ *   - When readOnly=true: shows existing notes only (no form).
+ *     Used for uploaders who can read but not write notes.
  */
 'use client';
 
@@ -21,23 +21,23 @@ import { useAddNote } from '@/hooks/use-invoice-mutations';
 
 interface InvoiceNotesProps {
   invoiceId: string;
+  /** When true the add-note form is hidden; only existing notes are shown. */
+  readOnly?: boolean;
 }
 
-/**
- * Notes panel for a single invoice.
- *
- * Fetches notes via `useInvoiceNotes`, renders them in chronological order,
- * and provides an add-note form that posts via `useAddNote`.
- */
-export function InvoiceNotes({ invoiceId }: InvoiceNotesProps) {
+export function InvoiceNotes({ invoiceId, readOnly = false }: InvoiceNotesProps) {
   const { data: notes = [], isLoading: isLoadingNotes } = useInvoiceNotes(invoiceId);
   const addNoteMutation = useAddNote();
   const [noteContent, setNoteContent] = useState('');
 
   const handleSubmitNote = async () => {
     if (!noteContent.trim()) return;
-    await addNoteMutation.mutateAsync({ id: invoiceId, content: noteContent.trim() });
-    setNoteContent('');
+    try {
+      await addNoteMutation.mutateAsync({ id: invoiceId, content: noteContent.trim() });
+      setNoteContent('');
+    } catch {
+      // error already handled by mutation's onError toast — prevent bubbling
+    }
   };
 
   return (
@@ -50,6 +50,9 @@ export function InvoiceNotes({ invoiceId }: InvoiceNotesProps) {
       <h3 className="mb-4 flex items-center gap-2 text-lg font-semibold tracking-tight text-zinc-50">
         <MessageSquare className="h-5 w-5 text-zinc-400" />
         Notes
+        {readOnly && (
+          <span className="text-xs font-normal text-zinc-500">(read-only)</span>
+        )}
       </h3>
 
       {/* Existing notes */}
@@ -77,33 +80,35 @@ export function InvoiceNotes({ invoiceId }: InvoiceNotesProps) {
         <p className="mb-4 text-sm text-zinc-500">No notes yet.</p>
       )}
 
-      {/* Add note form */}
-      <div className="space-y-3">
-        <Textarea
-          placeholder="Add a note..."
-          value={noteContent}
-          onChange={(e) => setNoteContent(e.target.value)}
-          className="resize-none border-zinc-700 bg-zinc-800 text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500"
-          rows={3}
-          maxLength={2000}
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-zinc-600">{noteContent.length}/2000</span>
-          <Button
-            onClick={handleSubmitNote}
-            disabled={!noteContent.trim() || addNoteMutation.isPending}
-            size="sm"
-            className="bg-indigo-600 text-white hover:bg-indigo-700"
-          >
-            {addNoteMutation.isPending ? (
-              <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Send className="mr-2 h-3.5 w-3.5" />
-            )}
-            Add Note
-          </Button>
+      {/* Add note form — only for non-read-only users */}
+      {!readOnly && (
+        <div className="space-y-3">
+          <Textarea
+            placeholder="Add a note..."
+            value={noteContent}
+            onChange={(e) => setNoteContent(e.target.value)}
+            className="resize-none border-zinc-700 bg-zinc-800 text-zinc-200 placeholder:text-zinc-600 focus:border-indigo-500"
+            rows={3}
+            maxLength={2000}
+          />
+          <div className="flex items-center justify-between">
+            <span className="text-xs text-zinc-600">{noteContent.length}/2000</span>
+            <Button
+              onClick={handleSubmitNote}
+              disabled={!noteContent.trim() || addNoteMutation.isPending}
+              size="sm"
+              className="bg-indigo-600 text-white hover:bg-indigo-700"
+            >
+              {addNoteMutation.isPending ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-3.5 w-3.5" />
+              )}
+              Add Note
+            </Button>
+          </div>
         </div>
-      </div>
+      )}
     </motion.div>
   );
 }

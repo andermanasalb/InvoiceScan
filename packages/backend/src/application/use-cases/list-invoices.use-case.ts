@@ -66,7 +66,9 @@ export class ListInvoicesUseCase {
         validatorId: invoice.getValidatorId(),
         providerId: invoice.getProviderId(),
         vendorName: invoice.getExtractedData()?.nombreEmisor ?? null,
-        amount: invoice.getAmount().getValue(),
+        // Prefer the LLM-extracted total; fall back to the upload-time placeholder.
+        amount:
+          invoice.getExtractedData()?.total ?? invoice.getAmount().getValue(),
         date: invoice.getDate().getValue(),
         createdAt: invoice.getCreatedAt(),
       })),

@@ -18,6 +18,7 @@ import {
   ADD_NOTE_USE_CASE_TOKEN,
   GET_INVOICE_NOTES_USE_CASE_TOKEN,
   GET_INVOICE_STATS_USE_CASE_TOKEN,
+  INVOICE_STORAGE_TOKEN,
 } from '../invoices.controller';
 import { InvoiceNotFoundError } from '../../../../domain/errors/invoice.errors.js';
 import { InvalidStateTransitionError } from '../../../../domain/errors/invoice.errors.js';
@@ -138,6 +139,10 @@ describe('InvoicesController (e2e)', () => {
         {
           provide: GET_INVOICE_STATS_USE_CASE_TOKEN,
           useValue: mockGetStatsUseCase,
+        },
+        {
+          provide: INVOICE_STORAGE_TOKEN,
+          useValue: { get: vi.fn().mockResolvedValue(Buffer.from('%PDF-1.4')) },
         },
         // Register the mock JWT guard globally (mirrors app.module.ts APP_GUARD),
         // so it runs for ALL routes and populates req.user for @CurrentUser().

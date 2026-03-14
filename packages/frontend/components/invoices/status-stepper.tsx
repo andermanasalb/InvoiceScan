@@ -69,6 +69,9 @@ export function StatusStepper({ currentStatus }: StatusStepperProps) {
       if (step === 'READY_FOR_VALIDATION') return 'action-needed';
     }
 
+    // APPROVED is a terminal success state — always show as ✓ completed.
+    if (currentStatus === 'APPROVED' && step === 'APPROVED') return 'completed';
+
     if (index < currentIndex) return 'completed';
     if (index === currentIndex) return 'current';
     return 'upcoming';

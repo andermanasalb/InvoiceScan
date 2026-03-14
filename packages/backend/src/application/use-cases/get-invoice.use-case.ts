@@ -14,9 +14,8 @@ const ROLES_WITH_FULL_ACCESS: string[] = [
 export class GetInvoiceUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
-    private readonly findUploaderEmail: (
-      uploaderId: string,
-    ) => Promise<string | null>,
+    /** Looks up any user's email by their ID — used for uploader, validator and approver. */
+    private readonly findUserEmail: (userId: string) => Promise<string | null>,
   ) {}
 
   async execute(
@@ -42,10 +41,18 @@ export class GetInvoiceUseCase {
           nifEmisor: raw.nifEmisor ?? null,
           baseImponible: raw.baseImponible ?? null,
           iva: raw.iva ?? null,
+          ivaPorcentaje: raw.ivaPorcentaje ?? null,
         }
       : null;
 
-    const uploaderEmail = await this.findUploaderEmail(invoice.getUploaderId());
+    const validatorId = invoice.getValidatorId();
+    const approverId = invoice.getApproverId();
+
+    const [uploaderEmail, validatorEmail, approverEmail] = await Promise.all([
+      this.findUserEmail(invoice.getUploaderId()),
+      validatorId ? this.findUserEmail(validatorId) : Promise.resolve(null),
+      approverId ? this.findUserEmail(approverId) : Promise.resolve(null),
+    ]);
 
     return ok({
       invoiceId: invoice.getId(),
@@ -54,11 +61,14 @@ export class GetInvoiceUseCase {
       uploaderEmail,
       providerId: invoice.getProviderId(),
       filePath: invoice.getFilePath(),
-      amount: invoice.getAmount().getValue(),
+      // Prefer LLM-extracted total; fall back to upload-time placeholder.
+      amount: raw?.total ?? invoice.getAmount().getValue(),
       date: invoice.getDate().getValue(),
       createdAt: invoice.getCreatedAt(),
-      validatorId: invoice.getValidatorId(),
-      approverId: invoice.getApproverId(),
+      validatorId,
+      validatorEmail,
+      approverId,
+      approverEmail,
       rejectionReason: invoice.getRejectionReason(),
       validationErrors: invoice.getValidationErrors(),
       extractedData,
