@@ -16,7 +16,8 @@ export interface ExtractedData {
   nifEmisor: string | null;
   nombreEmisor: string | null;
   baseImponible: number | null;
-  iva: number | null;
+  iva: number | null; // importe del IVA en euros
+  ivaPorcentaje: number | null; // tipo/porcentaje de IVA (p.ej. 21)
 }
 
 export interface CreateInvoiceProps {

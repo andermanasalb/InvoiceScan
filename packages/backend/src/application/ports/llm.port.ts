@@ -12,7 +12,8 @@ export interface LLMExtractionResult {
   nifEmisor: string | null;
   nombreEmisor: string | null;
   baseImponible: number | null;
-  iva: number | null;
+  iva: number | null; // importe del IVA en euros (p.ej. 91.59)
+  ivaPorcentaje: number | null; // tipo/porcentaje de IVA aplicado (p.ej. 21)
 }
 
 export interface LLMPort {

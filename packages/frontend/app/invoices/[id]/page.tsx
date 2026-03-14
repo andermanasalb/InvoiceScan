@@ -240,14 +240,21 @@ export default function InvoiceDetailPage() {
                     </div>
                   )}
 
-                  {invoice.extractedData?.iva != null && (
+                  {(invoice.extractedData?.iva != null || invoice.extractedData?.ivaPorcentaje != null) && (
                     <div className="rounded-lg bg-zinc-800/50 p-4">
                       <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-zinc-500">
                         <DollarSign className="h-3.5 w-3.5" />
                         VAT (IVA)
                       </div>
                       <p className="text-sm font-semibold text-zinc-200">
-                        {formatAmount(invoice.extractedData.iva)}
+                        {invoice.extractedData?.iva != null
+                          ? formatAmount(invoice.extractedData.iva)
+                          : '—'}
+                        {invoice.extractedData?.ivaPorcentaje != null && (
+                          <span className="ml-2 text-xs font-normal text-zinc-400">
+                            ({invoice.extractedData.ivaPorcentaje} %)
+                          </span>
+                        )}
                       </p>
                     </div>
                   )}

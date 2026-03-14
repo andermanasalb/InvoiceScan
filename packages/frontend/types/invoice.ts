@@ -20,7 +20,8 @@ export interface InvoiceExtractedData {
   nombreEmisor: string | null;    // vendor/emitter name extracted by LLM
   nifEmisor: string | null;       // tax ID extracted by LLM
   baseImponible: number | null;   // net amount (before VAT)
-  iva: number | null;             // VAT amount
+  iva: number | null;             // VAT amount in euros (e.g. 91.59)
+  ivaPorcentaje: number | null;   // VAT rate % (e.g. 21)
 }
 
 export interface Invoice {
@@ -29,6 +30,7 @@ export interface Invoice {
   uploaderId: string;
   uploaderEmail: string | null;
   providerId: string;
+  vendorName: string | null;   // vendor name from extractedData (list response)
   filePath: string;
   amount: number;
   date: string;        // invoice date ISO string

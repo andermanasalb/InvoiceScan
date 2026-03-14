@@ -34,6 +34,7 @@ const VALID_EXTRACTION = {
   nombreEmisor: 'Proveedor S.L.',
   baseImponible: 100.0,
   iva: 21.0,
+  ivaPorcentaje: 21,
 };
 
 const OCR_TEXT = 'FACTURA FAC-2024-001\nFecha: 15/03/2024\nTotal: 121,00 EUR';
@@ -65,6 +66,7 @@ describe('AIStudioAdapter', () => {
     expect(data.nombreEmisor).toBe('Proveedor S.L.');
     expect(data.baseImponible).toBe(100.0);
     expect(data.iva).toBe(21.0);
+    expect(data.ivaPorcentaje).toBe(21);
   });
 
   it('should return LLMError when the API throws an exception', async () => {
@@ -105,6 +107,7 @@ describe('AIStudioAdapter', () => {
         nombreEmisor: 'Empresa Desconocida S.A.',
         baseImponible: null,
         iva: null,
+        ivaPorcentaje: null,
       }),
     );
 
@@ -117,6 +120,7 @@ describe('AIStudioAdapter', () => {
     expect(data.total).toBe(250.0);
     expect(data.fecha).toBeNull();
     expect(data.numeroFactura).toBeNull();
+    expect(data.ivaPorcentaje).toBeNull();
   });
 
   it('should parse total and baseImponible as numbers, not strings', async () => {

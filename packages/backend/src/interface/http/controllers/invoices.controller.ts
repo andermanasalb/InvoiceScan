@@ -419,12 +419,12 @@ export class InvoicesController {
    * PATCH /api/v1/invoices/:id/send-to-approval
    *
    * Moves a READY_FOR_VALIDATION invoice to READY_FOR_APPROVAL.
-   * Only approvers and admins can call this.
+   * Validators, approvers and admins can call this.
    * The same person who moved it to READY_FOR_VALIDATION cannot also call this
    * (unless they are admin).
    */
   @Patch(':id/send-to-approval')
-  @Roles('approver', 'admin')
+  @Roles('validator', 'approver', 'admin')
   @HttpCode(HttpStatus.OK)
   async sendToApproval(
     @CurrentUser() user: AuthenticatedUser,

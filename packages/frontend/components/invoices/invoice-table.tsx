@@ -16,7 +16,6 @@ import { StatusBadge } from './status-badge';
 import { CopyableId } from '@/components/ui/copyable-id';
 import { staggerContainer, staggerItem } from '@/components/layout/page-transition';
 import type { Invoice, UserRole } from '@/types/invoice';
-import { formatProviderName } from '@/types/invoice';
 
 interface InvoiceTableProps {
   invoices: Invoice[];
@@ -47,7 +46,7 @@ export function InvoiceTable({
 
   // Role-level capability (regardless of ownership)
   const roleCanApprove = userRole === 'approver' || userRole === 'admin';
-  const roleCanSendToApproval = userRole === 'approver' || userRole === 'admin';
+  const roleCanSendToApproval = userRole === 'validator' || userRole === 'approver' || userRole === 'admin';
   const roleCanSendToValidation =
     userRole === 'uploader' ||
     userRole === 'validator' ||
@@ -74,7 +73,7 @@ export function InvoiceTable({
           <TableRow className="border-zinc-800 hover:bg-transparent">
             <TableHead className="w-12 text-zinc-500">#</TableHead>
             <TableHead className="text-zinc-500">Invoice ID</TableHead>
-            <TableHead className="text-zinc-500">Provider</TableHead>
+            <TableHead className="text-zinc-500">Vendor</TableHead>
             <TableHead className="text-zinc-500">Status</TableHead>
             <TableHead className="text-zinc-500">Amount</TableHead>
             <TableHead className="text-zinc-500">Date</TableHead>
@@ -117,7 +116,7 @@ export function InvoiceTable({
                 <CopyableId id={invoice.invoiceId} className="mt-1" />
               </TableCell>
               <TableCell className="text-zinc-300 text-xs">
-                {formatProviderName(invoice.providerId)}
+                {invoice.vendorName ?? '—'}
               </TableCell>
               <TableCell>
                 <StatusBadge status={invoice.status} size="sm" />

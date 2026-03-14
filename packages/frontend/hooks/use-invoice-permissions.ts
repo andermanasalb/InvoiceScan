@@ -58,9 +58,9 @@ export function useInvoicePermissions({
       (role === 'uploader' && isOwner) ||
       ((role === 'validator' || role === 'approver') && !isOwner));
 
-  // Step 2: READY_FOR_VALIDATION → READY_FOR_APPROVAL (approver/admin only, not the validator who validated)
+  // Step 2: READY_FOR_VALIDATION → READY_FOR_APPROVAL (validator/approver/admin, not the validator who validated)
   const canSendToApproval =
-    (role === 'approver' || role === 'admin') &&
+    (role === 'validator' || role === 'approver' || role === 'admin') &&
     invoice?.status === 'READY_FOR_VALIDATION' &&
     (isAdmin || (!isOwner && !isValidator));
 

@@ -62,6 +62,13 @@ export function StatusStepper({ currentStatus }: StatusStepperProps) {
       return index === 0 ? 'current' : 'upcoming';
     }
 
+    // Special case: EXTRACTED is a completed machine step (OCR done).
+    // The next human action is READY_FOR_VALIDATION, so highlight that instead.
+    if (currentStatus === 'EXTRACTED') {
+      if (step === 'EXTRACTED') return 'completed';
+      if (step === 'READY_FOR_VALIDATION') return 'action-needed';
+    }
+
     if (index < currentIndex) return 'completed';
     if (index === currentIndex) return 'current';
     return 'upcoming';
@@ -80,12 +87,13 @@ export function StatusStepper({ currentStatus }: StatusStepperProps) {
               <motion.div
                 initial={false}
                 animate={{
-                  scale: state === 'current' ? 1.1 : 1,
+                  scale: state === 'current' || state === 'action-needed' ? 1.1 : 1,
                 }}
                 className={cn(
                   'relative flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors',
                   state === 'completed' && 'border-indigo-500 bg-indigo-500',
                   state === 'current' && 'border-indigo-500 bg-transparent',
+                  state === 'action-needed' && 'border-cyan-500 bg-transparent',
                   state === 'upcoming' && 'border-zinc-700 bg-transparent',
                   state === 'failed' && 'border-rose-500 bg-rose-500',
                   state === 'rejected' && 'border-red-500 bg-red-500'
@@ -114,6 +122,20 @@ export function StatusStepper({ currentStatus }: StatusStepperProps) {
                     }}
                   />
                 )}
+                {state === 'action-needed' && (
+                  <motion.div
+                    className="absolute inset-0 rounded-full border-2 border-cyan-500"
+                    animate={{
+                      scale: [1, 1.2, 1],
+                      opacity: [1, 0.4, 1],
+                    }}
+                    transition={{
+                      duration: 1.5,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }}
+                  />
+                )}
                 {state === 'upcoming' && (
                   <div className="h-2 w-2 rounded-full bg-zinc-700" />
                 )}
@@ -125,12 +147,16 @@ export function StatusStepper({ currentStatus }: StatusStepperProps) {
                   'mt-2 text-xs font-medium',
                   state === 'completed' && 'text-indigo-400',
                   state === 'current' && 'text-indigo-400',
+                  state === 'action-needed' && 'text-cyan-400',
                   state === 'upcoming' && 'text-zinc-600',
                   state === 'failed' && 'text-rose-400',
                   state === 'rejected' && 'text-red-400'
                 )}
               >
                 {stepLabels[step]}
+                {state === 'action-needed' && (
+                  <span className="ml-1 text-cyan-500">→</span>
+                )}
               </span>
             </div>
 

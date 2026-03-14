@@ -52,9 +52,10 @@ const getNavItems = (role: UserRole | null, pendingCount?: number, extractedCoun
   ];
 
   // Add Needs Review for validator (and approver/admin for completeness)
+  // Links to READY_FOR_VALIDATION — where invoices land after uploader sends them
   if (role === 'validator' || role === 'approver' || role === 'admin') {
     items.push({
-      href: '/invoices?status=EXTRACTED',
+      href: '/invoices?status=READY_FOR_VALIDATION',
       label: 'Needs Review',
       icon: CheckSquare,
       roles: ['validator', 'approver', 'admin'],

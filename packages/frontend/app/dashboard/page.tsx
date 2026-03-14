@@ -51,9 +51,16 @@ export default function DashboardPage() {
   const approvedCount = stats['APPROVED'] ?? 0;
   const rejectedCount = stats['REJECTED'] ?? 0;
   const extractedCount = stats['EXTRACTED'] ?? 0;
+  // Invoices awaiting validator review (uploader already sent them to validation)
+  const readyForValidationCount = stats['READY_FOR_VALIDATION'] ?? 0;
 
   const canApprove = role === 'approver' || role === 'admin';
   const canReview = role === 'validator' || role === 'approver' || role === 'admin';
+
+  // Count shown in sidebar badge and stat card depends on role:
+  // - uploader: EXTRACTED (their own invoices waiting for them to send to validation)
+  // - validator/approver/admin: READY_FOR_VALIDATION (invoices waiting for their review)
+  const needsReviewCount = canReview ? readyForValidationCount : extractedCount;
 
   const sendToApproval = useSendToApproval();
 
@@ -61,10 +68,10 @@ export default function DashboardPage() {
     <AppShell 
       title="Dashboard" 
       pendingCount={pendingApproval}
-      extractedCount={extractedCount}
+      extractedCount={needsReviewCount}
     >
-      {/* Needs Your Review - for validators */}
-      {canReview && !canApprove && extractedCount > 0 && (
+      {/* Needs Your Review - for validators/approvers (READY_FOR_VALIDATION) */}
+      {canReview && !canApprove && readyForValidationCount > 0 && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -77,11 +84,11 @@ export default function DashboardPage() {
                   Needs Your Review
                 </h2>
                 <p className="mt-1 text-sm text-zinc-400">
-                  {extractedCount} invoice{extractedCount !== 1 ? 's' : ''} awaiting validator review
+                  {readyForValidationCount} invoice{readyForValidationCount !== 1 ? 's' : ''} ready for validation
                 </p>
               </div>
               <Button asChild className="bg-cyan-600 text-white hover:bg-cyan-700">
-                <Link href="/invoices?status=EXTRACTED">
+                <Link href="/invoices?status=READY_FOR_VALIDATION">
                   Review Now
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Link>
@@ -139,7 +146,7 @@ export default function DashboardPage() {
             {canReview && !canApprove ? (
               <StatCard 
                 title="Awaiting Review" 
-                value={extractedCount} 
+                value={readyForValidationCount} 
                 icon={Search}
                 index={1}
               />

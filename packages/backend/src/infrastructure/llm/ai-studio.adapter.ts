@@ -17,6 +17,10 @@ const ExtractionSchema = z.object({
   nombreEmisor: z.string().nullable(),
   baseImponible: z.union([z.number(), z.string().transform(Number)]).nullable(),
   iva: z.union([z.number(), z.string().transform(Number)]).nullable(),
+  ivaPorcentaje: z
+    .union([z.number(), z.string().transform(Number)])
+    .nullable()
+    .default(null),
 });
 
 // ─── Prompt ──────────────────────────────────────────────────────────────────
@@ -30,8 +34,9 @@ identificar y devolver exactamente los siguientes campos en formato JSON.
 
 Reglas:
 - Si no encuentras un campo, devuelve null para ese campo.
-- "total" y "baseImponible" deben ser números decimales (no strings).
-- "iva" es el porcentaje de IVA aplicado (p.ej. 21 para 21%).
+- "total", "baseImponible" e "iva" deben ser números decimales (no strings).
+- "iva" es el IMPORTE del IVA en euros tal como aparece en la factura (p.ej. 91.59 si pone "IVA: 91,59 €").
+- "ivaPorcentaje" es el TIPO de IVA aplicado en porcentaje (p.ej. 21 si es IVA del 21%).
 - "fecha" debe estar en formato ISO YYYY-MM-DD.
 - "nifEmisor" es el NIF o CIF del emisor de la factura.
 - Devuelve ÚNICAMENTE el JSON, sin explicaciones ni markdown.
@@ -49,7 +54,8 @@ Responde con este JSON (y nada más):
   "nifEmisor": <string|null>,
   "nombreEmisor": <string|null>,
   "baseImponible": <number|null>,
-  "iva": <number|null>
+  "iva": <number|null>,
+  "ivaPorcentaje": <number|null>
 }
 `.trim();
 

@@ -11,5 +11,6 @@ export const createExtractedData = (
   nombreEmisor: null,
   baseImponible: null,
   iva: null,
+  ivaPorcentaje: null,
   ...overrides,
 });

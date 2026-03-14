@@ -39,6 +39,7 @@ export class InvoiceMapper {
           nombreEmisor: (raw['nombreEmisor'] as string | null) ?? null,
           baseImponible: (raw['baseImponible'] as number | null) ?? null,
           iva: (raw['iva'] as number | null) ?? null,
+          ivaPorcentaje: (raw['ivaPorcentaje'] as number | null) ?? null,
         }
       : null;
 
