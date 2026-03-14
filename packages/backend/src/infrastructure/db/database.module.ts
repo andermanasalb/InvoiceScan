@@ -11,6 +11,8 @@ import {
   AuditEventOrmEntity,
   OutboxEventOrmEntity,
   InvoiceNoteOrmEntity,
+  UploaderValidatorAssignmentOrmEntity,
+  ValidatorApproverAssignmentOrmEntity,
 } from './entities';
 
 import {
@@ -24,6 +26,8 @@ import {
   InvoiceEventTypeOrmRepository,
   InvoiceNoteTypeOrmRepository,
 } from './repositories';
+import { AssignmentTypeOrmRepository } from './repositories/assignment.typeorm-repository';
+import { ASSIGNMENT_REPOSITORY } from '../../domain/repositories/assignment.repository';
 
 import { OUTBOX_EVENT_REPOSITORY } from '../../domain/repositories/outbox-event.repository.js';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository.js';
@@ -59,6 +63,8 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
       AuditEventOrmEntity,
       OutboxEventOrmEntity,
       InvoiceNoteOrmEntity,
+      UploaderValidatorAssignmentOrmEntity,
+      ValidatorApproverAssignmentOrmEntity,
     ]),
   ],
   providers: [
@@ -84,6 +90,10 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
       provide: INVOICE_NOTE_REPOSITORY,
       useClass: InvoiceNoteTypeOrmRepository,
     },
+    {
+      provide: ASSIGNMENT_REPOSITORY,
+      useClass: AssignmentTypeOrmRepository,
+    },
   ],
   exports: [
     'InvoiceRepository',
@@ -94,6 +104,7 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
     OUTBOX_EVENT_REPOSITORY,
     INVOICE_EVENT_REPOSITORY,
     INVOICE_NOTE_REPOSITORY,
+    ASSIGNMENT_REPOSITORY,
   ],
 })
 export class DatabaseModule {}

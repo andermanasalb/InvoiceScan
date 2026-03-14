@@ -6,3 +6,5 @@ export { InvoiceEventOrmEntity } from './invoice-event.orm-entity';
 export { AuditEventOrmEntity } from './audit-event.orm-entity';
 export { OutboxEventOrmEntity } from './outbox-event.orm-entity';
 export { InvoiceNoteOrmEntity } from './invoice-note.orm-entity';
+export { UploaderValidatorAssignmentOrmEntity } from './uploader-validator-assignment.orm-entity';
+export { ValidatorApproverAssignmentOrmEntity } from './validator-approver-assignment.orm-entity';

@@ -52,6 +52,8 @@ import type { StoragePort } from './application/ports/storage.port';
 import type { AuditPort } from './application/ports/audit.port';
 import type { EventBusPort } from './application/ports/event-bus.port';
 import type { InvoiceQueuePort } from './application/ports/invoice-queue.port';
+import type { AssignmentRepository } from './domain/repositories/assignment.repository';
+import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.repository';
 import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoice.typeorm-repository';
 
 /**
@@ -126,9 +128,11 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
 
     {
       provide: LIST_INVOICES_USE_CASE_TOKEN,
-      useFactory: (invoiceRepo: InvoiceRepository) =>
-        new ListInvoicesUseCase(invoiceRepo),
-      inject: ['InvoiceRepository'],
+      useFactory: (
+        invoiceRepo: InvoiceRepository,
+        assignmentRepo: AssignmentRepository,
+      ) => new ListInvoicesUseCase(invoiceRepo, assignmentRepo),
+      inject: ['InvoiceRepository', ASSIGNMENT_REPOSITORY],
     },
 
     {
@@ -250,9 +254,11 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
 
     {
       provide: GET_INVOICE_STATS_USE_CASE_TOKEN,
-      useFactory: (invoiceRepo: InvoiceRepository) =>
-        new GetInvoiceStatsUseCase(invoiceRepo),
-      inject: ['InvoiceRepository'],
+      useFactory: (
+        invoiceRepo: InvoiceRepository,
+        assignmentRepo: AssignmentRepository,
+      ) => new GetInvoiceStatsUseCase(invoiceRepo, assignmentRepo),
+      inject: ['InvoiceRepository', ASSIGNMENT_REPOSITORY],
     },
   ],
 })

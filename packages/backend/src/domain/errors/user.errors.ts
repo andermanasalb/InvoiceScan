@@ -31,3 +31,11 @@ export class InvalidCredentialsError extends DomainError {
     super('Invalid email or password');
   }
 }
+
+export class InvalidRoleError extends DomainError {
+  readonly code = 'INVALID_ROLE';
+
+  constructor(message: string) {
+    super(message);
+  }
+}

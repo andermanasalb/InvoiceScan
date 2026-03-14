@@ -70,6 +70,39 @@ export function useSendToApproval() {
   });
 }
 
+/**
+ * Sends an invoice to approval, optionally saving a note first.
+ * If `note` is a non-empty string the note is persisted before the status
+ * transition so the approver sees it immediately.
+ */
+export function useSendToApprovalWithNote() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      if (note) {
+        await invoiceApi.addNote(id, note);
+      }
+      return invoiceApi.sendToApproval(id);
+    },
+    onSuccess: (_, { id }) => {
+      toast.success('Invoice sent for approval');
+      queryClient.invalidateQueries({ queryKey: ['invoice', id] });
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-events', id] });
+      queryClient.invalidateQueries({ queryKey: ['invoice-notes', id] });
+    },
+    onError: (error: AxiosError<ApiError>) => {
+      const code = error.response?.data?.error?.code;
+      if (code === 'WRONG_STATE' || error.response?.status === 409) {
+        toast.error('Invoice is not in READY_FOR_VALIDATION state. Refresh the page.');
+      } else {
+        toast.error(error.response?.data?.error?.message || 'Failed to send invoice for approval');
+      }
+    },
+  });
+}
+
 export function useSendToValidation() {
   const queryClient = useQueryClient();
 

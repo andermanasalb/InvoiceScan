@@ -9,7 +9,7 @@ import {
   Upload, 
   CheckSquare,
   Users,
-  Building2,
+  GitBranch,
   LogOut,
   FileIcon
 } from 'lucide-react';
@@ -76,23 +76,21 @@ const getNavItems = (role: UserRole | null, pendingCount?: number, extractedCoun
     });
   }
 
-  // Add admin-only items (coming soon)
+  // Add admin-only items
   if (role === 'admin') {
     items.push(
       {
-        href: '#',
-        label: 'Providers',
-        icon: Building2,
-        roles: ['admin'],
-        comingSoon: true,
-      },
-      {
-        href: '#',
+        href: '/admin/users',
         label: 'Users',
         icon: Users,
         roles: ['admin'],
-        comingSoon: true,
-      }
+      },
+      {
+        href: '/admin/assignments',
+        label: 'Assignments',
+        icon: GitBranch,
+        roles: ['admin'],
+      },
     );
   }
 

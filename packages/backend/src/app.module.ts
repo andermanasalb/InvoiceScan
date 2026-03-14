@@ -24,6 +24,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
+import { AdminModule } from './admin.module';
 import { JobsModule } from './interface/jobs/jobs.module';
 import { AuthModule } from './interface/auth.module';
 import { JwtAuthGuard } from './interface/http/guards/jwt-auth.guard';
@@ -77,6 +78,7 @@ const bullBoardModules =
 
     DatabaseModule,
     InvoicesModule,
+    AdminModule,
     JobsModule,
     AuthModule,
   ],

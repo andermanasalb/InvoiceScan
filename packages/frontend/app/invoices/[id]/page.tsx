@@ -41,11 +41,12 @@ import { StatusStepper } from '@/components/invoices/status-stepper';
 import { InvoiceEventTimeline } from '@/components/invoices/invoice-event-timeline';
 import { ApproveDialog } from '@/components/invoices/approve-dialog';
 import { RejectModal } from '@/components/invoices/reject-modal';
+import { SendToApprovalModal } from '@/components/invoices/send-to-approval-modal';
 import { InvoiceNotes } from '@/components/invoices/invoice-notes';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useInvoice } from '@/hooks/use-invoice';
 import { useInvoiceEvents } from '@/hooks/use-invoice-events';
-import { useApproveInvoice, useRejectInvoice, useSendToApproval, useSendToValidation, useRetryInvoice } from '@/hooks/use-invoice-mutations';
+import { useApproveInvoice, useRejectInvoice, useSendToApprovalWithNote, useSendToValidation, useRetryInvoice } from '@/hooks/use-invoice-mutations';
 import { useInvoicePermissions } from '@/hooks/use-invoice-permissions';
 import { useAuth } from '@/context/auth-context';
 import { formatProviderName } from '@/types/invoice';
@@ -61,12 +62,13 @@ export default function InvoiceDetailPage() {
 
   const approveMutation = useApproveInvoice();
   const rejectMutation = useRejectInvoice();
-  const sendToApprovalMutation = useSendToApproval();
+  const sendToApprovalMutation = useSendToApprovalWithNote();
   const sendToValidationMutation = useSendToValidation();
   const retryMutation = useRetryInvoice();
 
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [sendToApprovalModalOpen, setSendToApprovalModalOpen] = useState(false);
 
   const {
     canApprove,
@@ -145,7 +147,7 @@ export default function InvoiceDetailPage() {
                   <div className="rounded-lg bg-zinc-800/50 p-4">
                     <div className="mb-1 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-zinc-500">
                       <Building2 className="h-3.5 w-3.5" />
-                      Provider
+                      AI Adapter
                     </div>
                     <p className="text-sm text-zinc-200">{formatProviderName(invoice.providerId)}</p>
                   </div>
@@ -285,7 +287,7 @@ export default function InvoiceDetailPage() {
                   </div>
                 )}
 
-                {/* Approver action: READY_FOR_VALIDATION → READY_FOR_APPROVAL */}
+                {/* Validator action: READY_FOR_VALIDATION → READY_FOR_APPROVAL */}
                 {canSendToApproval && (
                   <div className="mt-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
                     <div className="mb-3 flex items-center gap-2 text-violet-400">
@@ -293,10 +295,10 @@ export default function InvoiceDetailPage() {
                       <span className="font-medium">Ready to Send for Approval</span>
                     </div>
                     <p className="mb-4 text-sm text-zinc-400">
-                      This invoice has been validated. Send it to the approver when ready.
+                      This invoice has been validated. You can add an optional note for the approver.
                     </p>
                     <Button
-                      onClick={() => sendToApprovalMutation.mutate(invoiceId)}
+                      onClick={() => setSendToApprovalModalOpen(true)}
                       disabled={sendToApprovalMutation.isPending}
                       className="bg-violet-600 text-white hover:bg-violet-700"
                     >
@@ -438,6 +440,16 @@ export default function InvoiceDetailPage() {
         onOpenChange={setRejectModalOpen}
         onConfirm={confirmReject}
         isLoading={rejectMutation.isPending}
+      />
+
+      <SendToApprovalModal
+        open={sendToApprovalModalOpen}
+        onOpenChange={setSendToApprovalModalOpen}
+        onConfirm={(note) => {
+          sendToApprovalMutation.mutate({ id: invoiceId, note });
+          setSendToApprovalModalOpen(false);
+        }}
+        isLoading={sendToApprovalMutation.isPending}
       />
     </AppShell>
   );

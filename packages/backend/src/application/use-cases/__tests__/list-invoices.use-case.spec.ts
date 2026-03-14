@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ListInvoicesUseCase } from '../list-invoices.use-case';
 import { InvoiceRepository } from '../../../domain/repositories';
+import type { AssignmentRepository } from '../../../domain/repositories/assignment.repository';
 import { createInvoice } from '../../../domain/test/factories';
 import { UserRole } from '../../../domain/entities/user.entity';
 
@@ -15,6 +16,7 @@ const paginatedResult = (count = 2) => ({
 
 describe('ListInvoicesUseCase', () => {
   let mockRepo: InvoiceRepository;
+  let mockAssignmentRepo: AssignmentRepository;
   let useCase: ListInvoicesUseCase;
 
   beforeEach(() => {
@@ -22,13 +24,27 @@ describe('ListInvoicesUseCase', () => {
       findById: vi.fn(),
       findAll: vi.fn().mockResolvedValue(paginatedResult()),
       findByUploaderId: vi.fn().mockResolvedValue(paginatedResult()),
+      findByUploaderIds: vi.fn().mockResolvedValue(paginatedResult()),
       save: vi.fn(),
       delete: vi.fn(),
       countByStatus: vi.fn(),
       countByStatusForUploader: vi.fn(),
+      countByStatusForUploaderIds: vi.fn(),
     };
 
-    useCase = new ListInvoicesUseCase(mockRepo);
+    mockAssignmentRepo = {
+      assignUploaderToValidator: vi.fn(),
+      assignValidatorToApprover: vi.fn(),
+      removeUploaderAssignment: vi.fn(),
+      removeValidatorAssignment: vi.fn(),
+      getAssignedUploaderIds: vi.fn().mockResolvedValue([]),
+      getAssignedValidatorIds: vi.fn().mockResolvedValue([]),
+      getAssignedValidatorForUploader: vi.fn(),
+      getAssignedApproverForValidator: vi.fn(),
+      getFullTree: vi.fn(),
+    };
+
+    useCase = new ListInvoicesUseCase(mockRepo, mockAssignmentRepo);
   });
 
   describe('execute', () => {
@@ -44,7 +60,7 @@ describe('ListInvoicesUseCase', () => {
       expect(mockRepo.findAll).not.toHaveBeenCalled();
     });
 
-    it('should use findAll when requester is a validator', async () => {
+    it('should use findByUploaderIds when requester is a validator (own + assigned uploaders)', async () => {
       await useCase.execute({
         requesterId: UPLOADER_ID,
         requesterRole: UserRole.VALIDATOR,
@@ -52,8 +68,19 @@ describe('ListInvoicesUseCase', () => {
         limit: 20,
       });
 
+      expect(mockRepo.findByUploaderIds).toHaveBeenCalledOnce();
+      expect(mockRepo.findAll).not.toHaveBeenCalled();
+    });
+
+    it('should use findAll when requester is an admin', async () => {
+      await useCase.execute({
+        requesterId: UPLOADER_ID,
+        requesterRole: UserRole.ADMIN,
+        page: 1,
+        limit: 20,
+      });
+
       expect(mockRepo.findAll).toHaveBeenCalledOnce();
-      expect(mockRepo.findByUploaderId).not.toHaveBeenCalled();
     });
 
     it('should return paginated results with correct meta', async () => {

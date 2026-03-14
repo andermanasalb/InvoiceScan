@@ -12,6 +12,7 @@
  */
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { 
@@ -32,7 +33,8 @@ import { useInvoices } from '@/hooks/use-invoices';
 import { useInvoiceStats } from '@/hooks/use-invoice-stats';
 import { useAuth } from '@/context/auth-context';
 import { InvoiceCharts } from '@/components/dashboard/invoice-charts';
-import { useSendToApproval } from '@/hooks/use-invoice-mutations';
+import { SendToApprovalModal } from '@/components/invoices/send-to-approval-modal';
+import { useSendToApprovalWithNote } from '@/hooks/use-invoice-mutations';
 
 export default function DashboardPage() {
   const { role, userId } = useAuth();
@@ -62,7 +64,9 @@ export default function DashboardPage() {
   // - validator/approver/admin: READY_FOR_VALIDATION (invoices waiting for their review)
   const needsReviewCount = canReview ? readyForValidationCount : extractedCount;
 
-  const sendToApproval = useSendToApproval();
+  const [sendToApprovalModalOpen, setSendToApprovalModalOpen] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const sendToApproval = useSendToApprovalWithNote();
 
   return (
     <AppShell 
@@ -208,11 +212,22 @@ export default function DashboardPage() {
             invoices={invoices.slice(0, 10)} 
             userRole={role}
             userId={userId}
-            onSendToApproval={(id) => sendToApproval.mutate(id)}
+            onSendToApproval={(id) => { setSelectedInvoiceId(id); setSendToApprovalModalOpen(true); }}
             isSendingToApproval={sendToApproval.isPending}
           />
         )}
       </div>
+      <SendToApprovalModal
+        open={sendToApprovalModalOpen}
+        onOpenChange={setSendToApprovalModalOpen}
+        onConfirm={(note) => {
+          if (!selectedInvoiceId) return;
+          sendToApproval.mutate({ id: selectedInvoiceId, note });
+          setSendToApprovalModalOpen(false);
+          setSelectedInvoiceId(null);
+        }}
+        isLoading={sendToApproval.isPending}
+      />
     </AppShell>
   );
 }

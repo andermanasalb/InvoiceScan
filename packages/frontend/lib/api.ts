@@ -201,3 +201,41 @@ export const invoiceApi = {
     return response.data;
   },
 };
+
+// Admin API functions (admin role only)
+export const adminApi = {
+  listUsers: async (role?: string) => {
+    const response = await api.get('/admin/users', { params: role ? { role } : {} });
+    return response.data;
+  },
+
+  createUser: async (payload: { email: string; password: string; role: string }) => {
+    const response = await api.post('/admin/users', payload);
+    return response.data;
+  },
+
+  getAssignmentTree: async () => {
+    const response = await api.get('/admin/assignments/tree');
+    return response.data;
+  },
+
+  assignUploader: async (uploaderId: string, validatorId: string) => {
+    const response = await api.post('/admin/assignments/uploaders', { uploaderId, validatorId });
+    return response.data;
+  },
+
+  removeUploaderAssignment: async (uploaderId: string) => {
+    const response = await api.delete(`/admin/assignments/uploaders/${uploaderId}`);
+    return response.data;
+  },
+
+  assignValidator: async (validatorId: string, approverId: string) => {
+    const response = await api.post('/admin/assignments/validators', { validatorId, approverId });
+    return response.data;
+  },
+
+  removeValidatorAssignment: async (validatorId: string) => {
+    const response = await api.delete(`/admin/assignments/validators/${validatorId}`);
+    return response.data;
+  },
+};

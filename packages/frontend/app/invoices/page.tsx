@@ -27,8 +27,9 @@ import { SkeletonTable } from '@/components/ui/skeleton-table';
 import { EmptyState } from '@/components/ui/empty-state';
 import { ApproveDialog } from '@/components/invoices/approve-dialog';
 import { RejectModal } from '@/components/invoices/reject-modal';
+import { SendToApprovalModal } from '@/components/invoices/send-to-approval-modal';
 import { useInvoices } from '@/hooks/use-invoices';
-import { useApproveInvoice, useRejectInvoice, useSendToApproval, useSendToValidation } from '@/hooks/use-invoice-mutations';
+import { useApproveInvoice, useRejectInvoice, useSendToApprovalWithNote, useSendToValidation } from '@/hooks/use-invoice-mutations';
 import { useAuth } from '@/context/auth-context';
 import type { InvoiceStatus } from '@/types/invoice';
 
@@ -67,9 +68,10 @@ function InvoiceListContent() {
   const page = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
   const limit = 20;
 
-  // Approve/Reject state
+  // Approve/Reject/SendToApproval state
   const [approveDialogOpen, setApproveDialogOpen] = useState(false);
   const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [sendToApprovalModalOpen, setSendToApprovalModalOpen] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useInvoices({ 
@@ -84,7 +86,7 @@ function InvoiceListContent() {
 
   const approveMutation = useApproveInvoice();
   const rejectMutation = useRejectInvoice();
-  const sendToApprovalMutation = useSendToApproval();
+  const sendToApprovalMutation = useSendToApprovalWithNote();
   const sendToValidationMutation = useSendToValidation();
 
   const invoices = data?.data ?? [];
@@ -124,6 +126,11 @@ function InvoiceListContent() {
   const handleReject = (id: string) => {
     setSelectedInvoiceId(id);
     setRejectModalOpen(true);
+  };
+
+  const handleSendToApproval = (id: string) => {
+    setSelectedInvoiceId(id);
+    setSendToApprovalModalOpen(true);
   };
 
   const confirmApprove = async () => {
@@ -230,7 +237,7 @@ function InvoiceListContent() {
             userId={userId}
             onApprove={handleApprove}
             onReject={handleReject}
-            onSendToApproval={(id) => sendToApprovalMutation.mutate(id)}
+            onSendToApproval={handleSendToApproval}
             onSendToValidation={(id) => sendToValidationMutation.mutate(id)}
             isApproving={approveMutation.isPending || rejectMutation.isPending}
             isSendingToApproval={sendToApprovalMutation.isPending}
@@ -286,6 +293,18 @@ function InvoiceListContent() {
         onOpenChange={setRejectModalOpen}
         onConfirm={confirmReject}
         isLoading={rejectMutation.isPending}
+      />
+
+      <SendToApprovalModal
+        open={sendToApprovalModalOpen}
+        onOpenChange={setSendToApprovalModalOpen}
+        onConfirm={(note) => {
+          if (!selectedInvoiceId) return;
+          sendToApprovalMutation.mutate({ id: selectedInvoiceId, note });
+          setSendToApprovalModalOpen(false);
+          setSelectedInvoiceId(null);
+        }}
+        isLoading={sendToApprovalMutation.isPending}
       />
     </AppShell>
   );

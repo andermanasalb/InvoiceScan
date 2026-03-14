@@ -34,6 +34,8 @@ describe('UploadInvoiceUseCase', () => {
       delete: vi.fn(),
       countByStatus: vi.fn(),
       countByStatusForUploader: vi.fn(),
+      findByUploaderIds: vi.fn(),
+      countByStatusForUploaderIds: vi.fn(),
     };
 
     mockStorage = {

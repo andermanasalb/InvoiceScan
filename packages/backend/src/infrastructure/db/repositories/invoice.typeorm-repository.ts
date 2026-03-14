@@ -107,6 +107,51 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
     return { items: orms.map((orm) => InvoiceMapper.toDomain(orm)), total };
   }
 
+  async findByUploaderIds(
+    uploaderIds: string[],
+    filters: InvoiceFilters,
+  ): Promise<PaginatedResult<Invoice>> {
+    if (uploaderIds.length === 0) return { items: [], total: 0 };
+
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 20;
+    const skip = (page - 1) * limit;
+
+    const qb = this.repo
+      .createQueryBuilder('invoice')
+      .where('invoice.uploaderId IN (:...uploaderIds)', { uploaderIds });
+
+    if (filters.status) {
+      qb.andWhere('invoice.status = :status', { status: filters.status });
+    }
+
+    const [rawField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(':');
+    const safeField = ALLOWED_SORT_FIELDS.has(rawField)
+      ? rawField
+      : 'createdAt';
+    const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    qb.orderBy(`invoice.${safeField}`, order).skip(skip).take(limit);
+
+    const [orms, total] = await qb.getManyAndCount();
+    return { items: orms.map((orm) => InvoiceMapper.toDomain(orm)), total };
+  }
+
+  async countByStatusForUploaderIds(
+    uploaderIds: string[],
+  ): Promise<Record<string, number>> {
+    if (uploaderIds.length === 0) return {};
+
+    const rows = await this.repo
+      .createQueryBuilder('invoice')
+      .select('invoice.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .where('invoice.uploaderId IN (:...uploaderIds)', { uploaderIds })
+      .groupBy('invoice.status')
+      .getRawMany<{ status: string; count: string }>();
+
+    return Object.fromEntries(rows.map((r) => [r.status, Number(r.count)]));
+  }
+
   async save(invoice: Invoice): Promise<void> {
     const orm = InvoiceMapper.toOrm(invoice);
     await this.repo.save(orm);

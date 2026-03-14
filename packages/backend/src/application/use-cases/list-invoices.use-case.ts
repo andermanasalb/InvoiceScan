@@ -1,12 +1,16 @@
 import { ok, Result } from 'neverthrow';
 import { InvoiceRepository } from '../../domain/repositories';
+import type { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import { ListInvoicesInput, ListInvoicesOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
 import { UserRole } from '../../domain/entities/user.entity';
 import { Invoice } from '../../domain/entities';
 
 export class ListInvoicesUseCase {
-  constructor(private readonly invoiceRepo: InvoiceRepository) {}
+  constructor(
+    private readonly invoiceRepo: InvoiceRepository,
+    private readonly assignmentRepo: AssignmentRepository,
+  ) {}
 
   async execute(
     input: ListInvoicesInput,
@@ -18,14 +22,44 @@ export class ListInvoicesUseCase {
       sort: input.sort,
     };
 
-    const isUploader = input.requesterRole === UserRole.UPLOADER;
+    let result: { items: Invoice[]; total: number };
 
-    const { items, total } = isUploader
-      ? await this.invoiceRepo.findByUploaderId(input.requesterId, filters)
-      : await this.invoiceRepo.findAll(filters);
+    if (input.requesterRole === UserRole.UPLOADER) {
+      // Uploaders see only their own invoices
+      result = await this.invoiceRepo.findByUploaderId(
+        input.requesterId,
+        filters,
+      );
+    } else if (input.requesterRole === UserRole.VALIDATOR) {
+      // Validators see their own invoices + invoices from assigned uploaders
+      const assignedUploaderIds =
+        await this.assignmentRepo.getAssignedUploaderIds(input.requesterId);
+      const allIds = Array.from(
+        new Set([input.requesterId, ...assignedUploaderIds]),
+      );
+      result = await this.invoiceRepo.findByUploaderIds(allIds, filters);
+    } else if (input.requesterRole === UserRole.APPROVER) {
+      // Approvers see their own + assigned validators' invoices + those validators' uploaders
+      const validatorIds = await this.assignmentRepo.getAssignedValidatorIds(
+        input.requesterId,
+      );
+      const uploaderIdArrays = await Promise.all(
+        validatorIds.map((vId) =>
+          this.assignmentRepo.getAssignedUploaderIds(vId),
+        ),
+      );
+      const uploaderIds = uploaderIdArrays.flat();
+      const allIds = Array.from(
+        new Set([input.requesterId, ...validatorIds, ...uploaderIds]),
+      );
+      result = await this.invoiceRepo.findByUploaderIds(allIds, filters);
+    } else {
+      // Admin sees everything
+      result = await this.invoiceRepo.findAll(filters);
+    }
 
     return ok({
-      items: items.map((invoice: Invoice) => ({
+      items: result.items.map((invoice: Invoice) => ({
         invoiceId: invoice.getId(),
         status: invoice.getStatus().getValue(),
         uploaderId: invoice.getUploaderId(),
@@ -36,7 +70,7 @@ export class ListInvoicesUseCase {
         date: invoice.getDate().getValue(),
         createdAt: invoice.getCreatedAt(),
       })),
-      total,
+      total: result.total,
       page: input.page,
       limit: input.limit,
     });

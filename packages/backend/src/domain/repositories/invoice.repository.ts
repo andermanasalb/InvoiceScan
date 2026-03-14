@@ -26,10 +26,22 @@ export interface InvoiceRepository {
     uploaderId: string,
     filters: InvoiceFilters,
   ): Promise<PaginatedResult<Invoice>>;
+  /**
+   * Finds invoices belonging to any of the given uploader IDs.
+   * Used by validator and approver for assignment-based visibility.
+   */
+  findByUploaderIds(
+    uploaderIds: string[],
+    filters: InvoiceFilters,
+  ): Promise<PaginatedResult<Invoice>>;
   /** Devuelve el conteo de facturas agrupado por estado. Una sola query SQL. */
   countByStatus(): Promise<Record<string, number>>;
   /** Igual que countByStatus pero limitado a las facturas de un uploader concreto. */
   countByStatusForUploader(uploaderId: string): Promise<Record<string, number>>;
+  /** Counts grouped by status for any of the given uploader IDs. */
+  countByStatusForUploaderIds(
+    uploaderIds: string[],
+  ): Promise<Record<string, number>>;
   save(invoice: Invoice): Promise<void>;
   delete(id: string): Promise<void>;
 }
