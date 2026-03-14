@@ -6,7 +6,6 @@ import { Eye, CheckCircle2, XCircle, Send } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import {
   Table,
-  TableBody,
   TableCell,
   TableHead,
   TableHeader,

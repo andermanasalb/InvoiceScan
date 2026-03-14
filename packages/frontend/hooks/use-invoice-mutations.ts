@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { invoiceApi } from '@/lib/api';
-import { AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 import type { ApiError } from '@/types/auth';
 import { GENERIC_PROVIDER_ID } from '@/types/invoice';
 

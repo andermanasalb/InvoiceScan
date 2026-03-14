@@ -64,7 +64,9 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
     }
 
     const [rawField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(':');
-    const safeField = ALLOWED_SORT_FIELDS.has(rawField) ? rawField : 'createdAt';
+    const safeField = ALLOWED_SORT_FIELDS.has(rawField)
+      ? rawField
+      : 'createdAt';
     const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     qb.orderBy(`invoice.${safeField}`, order);
 
@@ -90,8 +92,12 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
       qb.andWhere('invoice.status = :status', { status: filters.status });
     }
 
-    const [rawField2, sortOrder2] = (filters.sort ?? 'createdAt:desc').split(':');
-    const safeField2 = ALLOWED_SORT_FIELDS.has(rawField2) ? rawField2 : 'createdAt';
+    const [rawField2, sortOrder2] = (filters.sort ?? 'createdAt:desc').split(
+      ':',
+    );
+    const safeField2 = ALLOWED_SORT_FIELDS.has(rawField2)
+      ? rawField2
+      : 'createdAt';
     const order2 = sortOrder2?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     qb.orderBy(`invoice.${safeField2}`, order2);
 

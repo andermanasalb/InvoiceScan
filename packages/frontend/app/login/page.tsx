@@ -17,7 +17,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useForm } from 'react-hook-form';
 import { Eye, EyeOff, FileIcon, ChevronDown } from 'lucide-react';
-import { AxiosError } from 'axios';
+import type { AxiosError } from 'axios';
 import { useAuth } from '@/context/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

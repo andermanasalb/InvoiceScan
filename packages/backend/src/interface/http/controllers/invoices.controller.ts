@@ -241,7 +241,11 @@ export class InvoicesController {
   async getStats(@CurrentUser() user: AuthenticatedUser) {
     const result = await this.getInvoiceStatsUseCase.execute({
       requesterId: user.userId,
-      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
     });
 
     if (result.isErr()) {
