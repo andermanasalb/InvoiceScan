@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
       {/* Stats row */}
       <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
         {(Object.keys(ROLE_CONFIG) as (keyof typeof ROLE_CONFIG)[]).map((role) => {
-          const { label, color, Icon } = ROLE_CONFIG[role];
+          const { label, Icon } = ROLE_CONFIG[role];
           return (
             <div
               key={role}
