@@ -3,6 +3,7 @@ import { ExecutionContext, INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import type { Server } from 'http';
 import {
   InvoicesController,
   UPLOAD_INVOICE_USE_CASE_TOKEN,
@@ -68,6 +69,7 @@ const FAKE_VALIDATOR: AuthenticatedUser = {
  */
 describe('InvoicesController (e2e)', () => {
   let app: INestApplication;
+  let httpServer: Server;
   let currentUser: AuthenticatedUser = FAKE_USER;
 
   // Shared mocks — each test can override their resolved value
@@ -150,6 +152,7 @@ describe('InvoicesController (e2e)', () => {
 
     app = moduleRef.createNestApplication();
     await app.init();
+    httpServer = app.getHttpServer() as Server;
   });
 
   afterAll(async () => {
@@ -182,7 +185,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeOutput,
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID)
         .attach('file', makePdfBuffer(), {
@@ -202,7 +205,7 @@ describe('InvoicesController (e2e)', () => {
         value: { invoiceId: 'inv-x', status: 'PENDING' },
       });
 
-      await request(app.getHttpServer())
+      await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID)
         .attach('file', makePdfBuffer(), {
@@ -219,7 +222,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when providerId is missing from the body', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .attach('file', makePdfBuffer(), {
           filename: 'invoice.pdf',
@@ -230,7 +233,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when providerId is not a valid UUID', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', 'not-a-uuid')
         .attach('file', makePdfBuffer(), {
@@ -243,7 +246,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when no file is provided', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID);
 
@@ -256,7 +259,7 @@ describe('InvoicesController (e2e)', () => {
       const oversized = Buffer.alloc(11 * 1024 * 1024);
       Buffer.from('%PDF-1.4 ', 'ascii').copy(oversized);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID)
         .attach('file', oversized, {
@@ -276,7 +279,7 @@ describe('InvoicesController (e2e)', () => {
         0x08, 0x02, 0x00, 0x00, 0x00,
       ]);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID)
         .attach('file', pngBuffer, {
@@ -315,9 +318,7 @@ describe('InvoicesController (e2e)', () => {
         value: { items: fakeItems, total: 1, page: 1, limit: 20 },
       });
 
-      const response = await request(app.getHttpServer()).get(
-        '/api/v1/invoices',
-      );
+      const response = await request(httpServer).get('/api/v1/invoices');
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveLength(1);
@@ -332,7 +333,7 @@ describe('InvoicesController (e2e)', () => {
         value: { items: [], total: 0, page: 2, limit: 10 },
       });
 
-      await request(app.getHttpServer()).get('/api/v1/invoices').query({
+      await request(httpServer).get('/api/v1/invoices').query({
         page: '2',
         limit: '10',
         status: 'PENDING',
@@ -356,7 +357,7 @@ describe('InvoicesController (e2e)', () => {
         value: { items: [], total: 0, page: 1, limit: 20 },
       });
 
-      await request(app.getHttpServer()).get('/api/v1/invoices');
+      await request(httpServer).get('/api/v1/invoices');
 
       const callArg = mockListUseCase.execute.mock.calls.at(-1)?.[0] as Record<
         string,
@@ -367,7 +368,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when page is not a valid number', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .get('/api/v1/invoices')
         .query({ page: 'abc' });
 
@@ -403,7 +404,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeInvoice,
       });
 
-      const response = await request(app.getHttpServer()).get(
+      const response = await request(httpServer).get(
         '/api/v1/invoices/inv-abc',
       );
 
@@ -419,7 +420,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeInvoice,
       });
 
-      await request(app.getHttpServer()).get('/api/v1/invoices/inv-abc');
+      await request(httpServer).get('/api/v1/invoices/inv-abc');
 
       const callArg = mockGetUseCase.execute.mock.calls.at(-1)?.[0] as Record<
         string,
@@ -439,7 +440,7 @@ describe('InvoicesController (e2e)', () => {
 
       // Without DomainErrorFilter wired in the test app this becomes a 500.
       // We only assert the error propagates (not a 200).
-      const response = await request(app.getHttpServer()).get(
+      const response = await request(httpServer).get(
         '/api/v1/invoices/inv-missing',
       );
 
@@ -467,7 +468,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeOutput,
       });
 
-      const response = await request(app.getHttpServer()).patch(
+      const response = await request(httpServer).patch(
         '/api/v1/invoices/inv-approve-1/approve',
       );
 
@@ -487,9 +488,7 @@ describe('InvoicesController (e2e)', () => {
         },
       });
 
-      await request(app.getHttpServer()).patch(
-        '/api/v1/invoices/inv-x/approve',
-      );
+      await request(httpServer).patch('/api/v1/invoices/inv-x/approve');
 
       const callArg = mockApproveUseCase.execute.mock.calls.at(
         -1,
@@ -505,7 +504,7 @@ describe('InvoicesController (e2e)', () => {
         error: new InvoiceNotFoundError('inv-missing'),
       });
 
-      const response = await request(app.getHttpServer()).patch(
+      const response = await request(httpServer).patch(
         '/api/v1/invoices/inv-missing/approve',
       );
 
@@ -519,7 +518,7 @@ describe('InvoicesController (e2e)', () => {
         error: new InvalidStateTransitionError('PENDING', 'APPROVED'),
       });
 
-      const response = await request(app.getHttpServer()).patch(
+      const response = await request(httpServer).patch(
         '/api/v1/invoices/inv-pending/approve',
       );
 
@@ -548,7 +547,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeOutput,
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .patch('/api/v1/invoices/inv-reject-1/reject')
         .send({ reason: 'Duplicate invoice' });
 
@@ -570,7 +569,7 @@ describe('InvoicesController (e2e)', () => {
         },
       });
 
-      await request(app.getHttpServer())
+      await request(httpServer)
         .patch('/api/v1/invoices/inv-y/reject')
         .send({ reason: 'Bad total' });
 
@@ -583,7 +582,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when reason is missing from body', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .patch('/api/v1/invoices/inv-z/reject')
         .send({});
 
@@ -591,7 +590,7 @@ describe('InvoicesController (e2e)', () => {
     });
 
     it('should return 400 when reason is an empty string', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .patch('/api/v1/invoices/inv-z/reject')
         .send({ reason: '' });
 
@@ -605,7 +604,7 @@ describe('InvoicesController (e2e)', () => {
         error: new InvoiceNotFoundError('inv-missing'),
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .patch('/api/v1/invoices/inv-missing/reject')
         .send({ reason: 'Something' });
 
@@ -619,7 +618,7 @@ describe('InvoicesController (e2e)', () => {
         error: new InvalidStateTransitionError('PENDING', 'REJECTED'),
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .patch('/api/v1/invoices/inv-pending/reject')
         .send({ reason: 'Something' });
 
@@ -660,7 +659,7 @@ describe('InvoicesController (e2e)', () => {
         value: fakeEvents,
       });
 
-      const response = await request(app.getHttpServer()).get(
+      const response = await request(httpServer).get(
         '/api/v1/invoices/inv-evt-1/events',
       );
 
@@ -679,9 +678,7 @@ describe('InvoicesController (e2e)', () => {
         value: [],
       });
 
-      await request(app.getHttpServer()).get(
-        '/api/v1/invoices/inv-evt-99/events',
-      );
+      await request(httpServer).get('/api/v1/invoices/inv-evt-99/events');
 
       const callArg = mockGetEventsUseCase.execute.mock.calls.at(
         -1,
@@ -698,7 +695,7 @@ describe('InvoicesController (e2e)', () => {
         value: [],
       });
 
-      const response = await request(app.getHttpServer()).get(
+      const response = await request(httpServer).get(
         '/api/v1/invoices/inv-empty/events',
       );
 
@@ -713,7 +710,7 @@ describe('InvoicesController (e2e)', () => {
         error: new InvoiceNotFoundError('inv-missing'),
       });
 
-      const response = await request(app.getHttpServer()).get(
+      const response = await request(httpServer).get(
         '/api/v1/invoices/inv-missing/events',
       );
 

@@ -1,5 +1,5 @@
 import { ok, err, Result } from 'neverthrow';
-import * as bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 import { UserRepository } from '../../domain/repositories';
 import { UserCredentialRepository } from '../../domain/repositories/user-credential.repository';
 import { TokenStorePort } from '../ports/token-store.port';

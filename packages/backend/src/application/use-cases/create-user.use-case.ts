@@ -1,6 +1,6 @@
 import { ok, err, Result } from 'neverthrow';
 import { randomUUID } from 'crypto';
-import * as bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 import { UserRepository } from '../../domain/repositories';
 import { UserCredentialRepository } from '../../domain/repositories/user-credential.repository';
 import { CreateUserInput, CreateUserOutput } from '../dtos';

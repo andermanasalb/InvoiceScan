@@ -7,7 +7,7 @@
  */
 
 import { DataSource } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import bcrypt from 'bcrypt';
 import * as dotenv from 'dotenv';
 import { join } from 'path';
 import { randomUUID } from 'crypto';

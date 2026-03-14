@@ -4,6 +4,7 @@ import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import request from 'supertest';
+import type { Server } from 'http';
 import {
   AuthController,
   LOGIN_USE_CASE_TOKEN,
@@ -34,6 +35,7 @@ const FAKE_USER: AuthenticatedUser = {
  */
 describe('AuthController (e2e)', () => {
   let app: INestApplication;
+  let httpServer: Server;
 
   const mockLoginUseCase = { execute: vi.fn() };
   const mockRefreshUseCase = { execute: vi.fn() };
@@ -71,6 +73,7 @@ describe('AuthController (e2e)', () => {
     // cookie-parser needed for refresh endpoint to read req.cookies
     app.use(cookieParser());
     await app.init();
+    httpServer = app.getHttpServer() as Server;
   });
 
   afterAll(async () => {
@@ -92,7 +95,7 @@ describe('AuthController (e2e)', () => {
         },
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ email: 'user@example.com', password: 'secret123' });
 
@@ -116,7 +119,7 @@ describe('AuthController (e2e)', () => {
         error: { code: 'INVALID_CREDENTIALS', message: 'Invalid credentials' },
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ email: 'user@example.com', password: 'wrong' });
 
@@ -124,7 +127,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('should return 400 when email is missing', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ password: 'secret123' });
 
@@ -132,7 +135,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('should return 400 when password is missing', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ email: 'user@example.com' });
 
@@ -140,7 +143,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('should return 400 when email is malformed', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ email: 'not-an-email', password: 'secret123' });
 
@@ -159,7 +162,7 @@ describe('AuthController (e2e)', () => {
         },
       });
 
-      await request(app.getHttpServer())
+      await request(httpServer)
         .post('/api/v1/auth/login')
         .send({ email: 'user@example.com', password: 'p@ss' });
 
@@ -186,7 +189,7 @@ describe('AuthController (e2e)', () => {
         value: { accessToken: 'new.access.token' },
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/refresh')
         .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
@@ -195,9 +198,7 @@ describe('AuthController (e2e)', () => {
     });
 
     it('should return 401 when no refresh cookie is present', async () => {
-      const response = await request(app.getHttpServer()).post(
-        '/api/v1/auth/refresh',
-      );
+      const response = await request(httpServer).post('/api/v1/auth/refresh');
 
       expect(response.status).toBe(401);
     });
@@ -209,7 +210,7 @@ describe('AuthController (e2e)', () => {
         error: { code: 'INVALID_CREDENTIALS', message: 'Token expired' },
       });
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/refresh')
         .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
@@ -223,7 +224,7 @@ describe('AuthController (e2e)', () => {
         value: { accessToken: 'tok' },
       });
 
-      await request(app.getHttpServer())
+      await request(httpServer)
         .post('/api/v1/auth/refresh')
         .set('Cookie', `refreshToken=${FAKE_REFRESH_TOKEN}`);
 
@@ -242,7 +243,7 @@ describe('AuthController (e2e)', () => {
     it('should return 204 and clear the refreshToken cookie', async () => {
       mockLogoutUseCase.execute.mockResolvedValue(undefined);
 
-      const response = await request(app.getHttpServer())
+      const response = await request(httpServer)
         .post('/api/v1/auth/logout')
         .set('Cookie', 'refreshToken=some.token');
 
@@ -266,7 +267,7 @@ describe('AuthController (e2e)', () => {
     it('should delegate to the logout use case with the userId from JWT', async () => {
       mockLogoutUseCase.execute.mockResolvedValue(undefined);
 
-      await request(app.getHttpServer())
+      await request(httpServer)
         .post('/api/v1/auth/logout')
         .set('Cookie', 'refreshToken=some.token');
 
