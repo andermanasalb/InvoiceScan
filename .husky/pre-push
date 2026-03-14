@@ -1,0 +1,3 @@
+pnpm --filter backend lint
+pnpm --filter backend typecheck
+pnpm --filter backend test:unit

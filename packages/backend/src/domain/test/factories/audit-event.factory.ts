@@ -1,5 +1,8 @@
 import { randomUUID } from 'crypto';
-import { AuditEvent, CreateAuditEventProps } from '../../entities/audit-event.entity';
+import {
+  AuditEvent,
+  CreateAuditEventProps,
+} from '../../entities/audit-event.entity';
 
 const defaultProps = (): CreateAuditEventProps => ({
   id: randomUUID(),
@@ -10,7 +13,9 @@ const defaultProps = (): CreateAuditEventProps => ({
   timestamp: new Date('2025-01-15'),
 });
 
-export const createAuditEvent = (overrides?: Partial<CreateAuditEventProps>): AuditEvent => {
+export const createAuditEvent = (
+  overrides?: Partial<CreateAuditEventProps>,
+): AuditEvent => {
   const props = { ...defaultProps(), ...overrides };
   return AuditEvent.create(props)._unsafeUnwrap();
 };

@@ -7,7 +7,9 @@ import { UserRole } from '../../../domain/entities/user.entity';
 const UPLOADER_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
 
 const paginatedResult = (count = 2) => ({
-  items: Array.from({ length: count }, () => createInvoice({ uploaderId: UPLOADER_ID })),
+  items: Array.from({ length: count }, () =>
+    createInvoice({ uploaderId: UPLOADER_ID }),
+  ),
   total: count,
 });
 

@@ -1,10 +1,7 @@
 import { ok, err, Result } from 'neverthrow';
 import type { InvoiceRepository } from '../../domain/repositories';
 import type { InvoiceEventRepository } from '../../domain/repositories/invoice-event.repository';
-import {
-  GetInvoiceEventsInput,
-  GetInvoiceEventsOutput,
-} from '../dtos';
+import { GetInvoiceEventsInput, GetInvoiceEventsOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError, UnauthorizedError } from '../../domain/errors';
 import { UserRole } from '../../domain/entities/user.entity';

@@ -9,7 +9,9 @@ const defaultProps = (): CreateProviderProps => ({
   createdAt: new Date('2025-01-15'),
 });
 
-export const createProvider = (overrides?: Partial<CreateProviderProps>): Provider => {
+export const createProvider = (
+  overrides?: Partial<CreateProviderProps>,
+): Provider => {
   const props = { ...defaultProps(), ...overrides };
   return Provider.create(props)._unsafeUnwrap();
 };

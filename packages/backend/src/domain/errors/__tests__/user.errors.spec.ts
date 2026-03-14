@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { UserNotFoundError, UnauthorizedError, InvalidCredentialsError } from '../user.errors';
+import {
+  UserNotFoundError,
+  UnauthorizedError,
+  InvalidCredentialsError,
+} from '../user.errors';
 import { DomainError } from '../domain.error';
 
 describe('User Domain Errors', () => {

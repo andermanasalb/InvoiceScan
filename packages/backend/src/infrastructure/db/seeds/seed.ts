@@ -62,7 +62,7 @@ async function seed() {
 
   for (const seedUser of SEED_USERS) {
     // Comprobar si ya existe
-    const existing = await dataSource.query(
+    const existing = await dataSource.query<{ id: string }[]>(
       `SELECT id FROM users WHERE email = $1`,
       [seedUser.email],
     );
@@ -92,7 +92,7 @@ async function seed() {
   }
 
   // ─── Seed providers ───────────────────────────────────────────────────────
-  const existingProvider = await dataSource.query(
+  const existingProvider = await dataSource.query<{ id: string }[]>(
     `SELECT id FROM providers WHERE id = $1`,
     [GENERIC_PROVIDER_ID],
   );
@@ -112,36 +112,33 @@ async function seed() {
   // Output
   console.log('');
   if (created === 0 && skipped === SEED_USERS.length) {
-    console.log('ℹ️  Todos los usuarios de seed ya existían. No se creó ninguno.');
+    console.log(
+      'ℹ️  Todos los usuarios de seed ya existían. No se creó ninguno.',
+    );
   } else {
-    console.log(`✅ Seed completado — ${created} usuario(s) creado(s), ${skipped} ya existían.`);
+    console.log(
+      `✅ Seed completado — ${created} usuario(s) creado(s), ${skipped} ya existían.`,
+    );
   }
 
   console.log('');
-  console.log(
-    '┌─────────────────────────────┬──────────────────┬───────────┐',
-  );
-  console.log(
-    '│ Email                       │ Password         │ Rol       │',
-  );
-  console.log(
-    '├─────────────────────────────┼──────────────────┼───────────┤',
-  );
+  console.log('┌─────────────────────────────┬──────────────────┬───────────┐');
+  console.log('│ Email                       │ Password         │ Rol       │');
+  console.log('├─────────────────────────────┼──────────────────┼───────────┤');
   for (const u of SEED_USERS) {
     const email = u.email.padEnd(27);
     const pass = u.password.padEnd(16);
     const role = u.role.padEnd(9);
     console.log(`│ ${email} │ ${pass} │ ${role} │`);
   }
-  console.log(
-    '└─────────────────────────────┴──────────────────┴───────────┘',
-  );
+  console.log('└─────────────────────────────┴──────────────────┴───────────┘');
   console.log('');
 }
 
 seed()
   .then(() => process.exit(0))
-  .catch((err) => {
-    console.error('❌ Error durante el seed:', err.message);
+  .catch((err: unknown) => {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error('❌ Error durante el seed:', message);
     process.exit(1);
   });

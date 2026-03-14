@@ -99,11 +99,11 @@ export class LocalStorageAdapter implements StoragePort {
    *
    * Format: /files/<base64(key:expiresAt)>
    */
-  async getSignedUrl(key: string, expiresInSeconds = 300): Promise<string> {
+  getSignedUrl(key: string, expiresInSeconds = 300): Promise<string> {
     const expiresAt = Date.now() + expiresInSeconds * 1000;
     const payload = `${key}:${expiresAt}`;
     const token = Buffer.from(payload).toString('base64url');
-    return `/files/${token}`;
+    return Promise.resolve(`/files/${token}`);
   }
 
   // ---------------------------------------------------------------------------

@@ -85,9 +85,7 @@ export class AuthController {
   @Post('refresh')
   @Public()
   @HttpCode(HttpStatus.OK)
-  async refresh(
-    @Req() req: Request,
-  ) {
+  async refresh(@Req() req: Request) {
     const cookies = req.cookies as Record<string, string> | undefined;
     const refreshToken = cookies?.[REFRESH_COOKIE];
 

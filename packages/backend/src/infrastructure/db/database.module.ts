@@ -67,11 +67,23 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
     { provide: 'InvoiceRepository', useClass: InvoiceTypeOrmRepository },
     { provide: 'ProviderRepository', useClass: ProviderTypeOrmRepository },
     { provide: 'UserRepository', useClass: UserTypeOrmRepository },
-    { provide: USER_CREDENTIAL_REPOSITORY, useClass: UserCredentialTypeOrmRepository },
+    {
+      provide: USER_CREDENTIAL_REPOSITORY,
+      useClass: UserCredentialTypeOrmRepository,
+    },
     { provide: 'AuditEventRepository', useClass: AuditEventTypeOrmRepository },
-    { provide: OUTBOX_EVENT_REPOSITORY, useClass: OutboxEventTypeOrmRepository },
-    { provide: INVOICE_EVENT_REPOSITORY, useClass: InvoiceEventTypeOrmRepository },
-    { provide: INVOICE_NOTE_REPOSITORY, useClass: InvoiceNoteTypeOrmRepository },
+    {
+      provide: OUTBOX_EVENT_REPOSITORY,
+      useClass: OutboxEventTypeOrmRepository,
+    },
+    {
+      provide: INVOICE_EVENT_REPOSITORY,
+      useClass: InvoiceEventTypeOrmRepository,
+    },
+    {
+      provide: INVOICE_NOTE_REPOSITORY,
+      useClass: InvoiceNoteTypeOrmRepository,
+    },
   ],
   exports: [
     'InvoiceRepository',

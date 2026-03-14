@@ -104,7 +104,8 @@ export class DomainErrorFilter implements ExceptionFilter {
     // ── 2. DomainError — map to correct HTTP status ───────────────────────
     if (this.isDomainError(exception)) {
       const status =
-        DOMAIN_ERROR_STATUS_MAP[exception.code] ?? HttpStatus.INTERNAL_SERVER_ERROR;
+        DOMAIN_ERROR_STATUS_MAP[exception.code] ??
+        HttpStatus.INTERNAL_SERVER_ERROR;
 
       if (status >= 500) {
         this.logger.error(

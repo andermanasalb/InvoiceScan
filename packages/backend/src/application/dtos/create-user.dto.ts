@@ -3,7 +3,9 @@ import { z } from 'zod';
 export const CreateUserInputSchema = z.object({
   email: z.string().email(),
   role: z.enum(['uploader', 'validator', 'approver', 'admin']),
-  password: z.string().min(8, { message: 'Password must be at least 8 characters' }),
+  password: z
+    .string()
+    .min(8, { message: 'Password must be at least 8 characters' }),
 });
 export type CreateUserInput = z.infer<typeof CreateUserInputSchema>;
 

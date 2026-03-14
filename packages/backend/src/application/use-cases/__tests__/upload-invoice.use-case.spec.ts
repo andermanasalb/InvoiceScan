@@ -7,7 +7,9 @@ import { UploadInvoiceInput } from '../../dtos';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 import type { InvoiceQueuePort } from '../../../infrastructure/queue/invoice-queue.service';
 
-const makeInput = (overrides?: Partial<UploadInvoiceInput>): UploadInvoiceInput => ({
+const makeInput = (
+  overrides?: Partial<UploadInvoiceInput>,
+): UploadInvoiceInput => ({
   uploaderId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
   providerId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
   fileBuffer: Buffer.from('fake-pdf'),
@@ -52,7 +54,12 @@ describe('UploadInvoiceUseCase', () => {
       enqueueRetry: vi.fn().mockResolvedValue(undefined),
     };
 
-    useCase = new UploadInvoiceUseCase(mockRepo, mockStorage, mockAudit, mockQueue);
+    useCase = new UploadInvoiceUseCase(
+      mockRepo,
+      mockStorage,
+      mockAudit,
+      mockQueue,
+    );
   });
 
   describe('execute', () => {
@@ -94,7 +101,12 @@ describe('UploadInvoiceUseCase', () => {
     });
 
     it('should return err when providerId is missing', async () => {
-      const result = await useCase.execute(makeInput({ providerId: '' as unknown as `${string}-${string}-${string}-${string}-${string}` }));
+      const result = await useCase.execute(
+        makeInput({
+          providerId:
+            '' as unknown as `${string}-${string}-${string}-${string}-${string}`,
+        }),
+      );
 
       expect(result.isErr()).toBe(true);
     });

@@ -6,7 +6,10 @@ import { QueueModule } from './infrastructure/queue/queue.module';
 import { STORAGE_TOKEN } from './infrastructure/storage/local-storage.adapter';
 import { InvoiceQueueService } from './infrastructure/queue/invoice-queue.service';
 import { OutboxEventBusAdapter } from './infrastructure/events/outbox-event-bus.adapter';
-import { AuditAdapter, AUDIT_PORT_TOKEN } from './infrastructure/audit/audit.adapter';
+import {
+  AuditAdapter,
+  AUDIT_PORT_TOKEN,
+} from './infrastructure/audit/audit.adapter';
 import { EVENT_BUS_TOKEN } from './application/ports/event-bus.port';
 import { OUTBOX_EVENT_REPOSITORY } from './domain/repositories/outbox-event.repository';
 import { INVOICE_EVENT_REPOSITORY } from './domain/repositories/invoice-event.repository';
@@ -110,7 +113,12 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         auditor: AuditPort,
         queue: InvoiceQueuePort,
       ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor, queue),
-      inject: ['InvoiceRepository', STORAGE_TOKEN, AUDIT_PORT_TOKEN, InvoiceQueueService],
+      inject: [
+        'InvoiceRepository',
+        STORAGE_TOKEN,
+        AUDIT_PORT_TOKEN,
+        InvoiceQueueService,
+      ],
     },
 
     {
@@ -123,9 +131,8 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
     {
       provide: GET_INVOICE_USE_CASE_TOKEN,
       useFactory: (invoiceRepo: InvoiceTypeOrmRepository) =>
-        new GetInvoiceUseCase(
-          invoiceRepo,
-          (uploaderId: string) => invoiceRepo.findUploaderEmail(uploaderId),
+        new GetInvoiceUseCase(invoiceRepo, (uploaderId: string) =>
+          invoiceRepo.findUploaderEmail(uploaderId),
         ),
       inject: ['InvoiceRepository'],
     },
@@ -137,8 +144,19 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         auditor: AuditPort,
         eventBus: EventBusPort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new ApproveInvoiceUseCase(invoiceRepo, auditor, eventBus, invoiceEventRepo),
-      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, EVENT_BUS_TOKEN, INVOICE_EVENT_REPOSITORY],
+      ) =>
+        new ApproveInvoiceUseCase(
+          invoiceRepo,
+          auditor,
+          eventBus,
+          invoiceEventRepo,
+        ),
+      inject: [
+        'InvoiceRepository',
+        AUDIT_PORT_TOKEN,
+        EVENT_BUS_TOKEN,
+        INVOICE_EVENT_REPOSITORY,
+      ],
     },
 
     {
@@ -148,8 +166,19 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         auditor: AuditPort,
         eventBus: EventBusPort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new RejectInvoiceUseCase(invoiceRepo, auditor, eventBus, invoiceEventRepo),
-      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, EVENT_BUS_TOKEN, INVOICE_EVENT_REPOSITORY],
+      ) =>
+        new RejectInvoiceUseCase(
+          invoiceRepo,
+          auditor,
+          eventBus,
+          invoiceEventRepo,
+        ),
+      inject: [
+        'InvoiceRepository',
+        AUDIT_PORT_TOKEN,
+        EVENT_BUS_TOKEN,
+        INVOICE_EVENT_REPOSITORY,
+      ],
     },
 
     {
@@ -188,8 +217,14 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
         auditor: AuditPort,
         queue: InvoiceQueuePort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new RetryInvoiceUseCase(invoiceRepo, auditor, queue, invoiceEventRepo),
-      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, InvoiceQueueService, INVOICE_EVENT_REPOSITORY],
+      ) =>
+        new RetryInvoiceUseCase(invoiceRepo, auditor, queue, invoiceEventRepo),
+      inject: [
+        'InvoiceRepository',
+        AUDIT_PORT_TOKEN,
+        InvoiceQueueService,
+        INVOICE_EVENT_REPOSITORY,
+      ],
     },
 
     {

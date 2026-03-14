@@ -14,7 +14,9 @@ const ROLES_WITH_FULL_ACCESS: string[] = [
 export class GetInvoiceUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
-    private readonly findUploaderEmail: (uploaderId: string) => Promise<string | null>,
+    private readonly findUploaderEmail: (
+      uploaderId: string,
+    ) => Promise<string | null>,
   ) {}
 
   async execute(

@@ -49,7 +49,9 @@ describe('ProcessInvoiceUseCase', () => {
     };
 
     mockOcr = {
-      extractText: vi.fn().mockResolvedValue(ok({ text: FAKE_TEXT, confidence: 95 })),
+      extractText: vi
+        .fn()
+        .mockResolvedValue(ok({ text: FAKE_TEXT, confidence: 95 })),
     };
 
     mockAudit = {
@@ -60,7 +62,13 @@ describe('ProcessInvoiceUseCase', () => {
       extractInvoiceData: vi.fn().mockResolvedValue(ok(FAKE_LLM_RESULT)),
     };
 
-    useCase = new ProcessInvoiceUseCase(mockRepo, mockStorage, mockOcr, mockAudit, mockLlm);
+    useCase = new ProcessInvoiceUseCase(
+      mockRepo,
+      mockStorage,
+      mockOcr,
+      mockAudit,
+      mockLlm,
+    );
   });
 
   describe('execute', () => {
@@ -87,31 +95,39 @@ describe('ProcessInvoiceUseCase', () => {
     });
 
     it('should transition invoice to VALIDATION_FAILED when OCR fails', async () => {
-      mockOcr.extractText = vi.fn().mockResolvedValue(
-        err(new OcrError('Tesseract could not read the document')),
-      );
+      mockOcr.extractText = vi
+        .fn()
+        .mockResolvedValue(
+          err(new OcrError('Tesseract could not read the document')),
+        );
 
       const result = await useCase.execute({ invoiceId: INVOICE_ID });
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap().status).toBe(InvoiceStatusEnum.VALIDATION_FAILED);
+      expect(result._unsafeUnwrap().status).toBe(
+        InvoiceStatusEnum.VALIDATION_FAILED,
+      );
     });
 
     it('should transition invoice to VALIDATION_FAILED when LLM fails', async () => {
-      mockLlm.extractInvoiceData = vi.fn().mockResolvedValue(
-        err(new LLMError('AI Studio API error')),
-      );
+      mockLlm.extractInvoiceData = vi
+        .fn()
+        .mockResolvedValue(err(new LLMError('AI Studio API error')));
 
       const result = await useCase.execute({ invoiceId: INVOICE_ID });
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap().status).toBe(InvoiceStatusEnum.VALIDATION_FAILED);
+      expect(result._unsafeUnwrap().status).toBe(
+        InvoiceStatusEnum.VALIDATION_FAILED,
+      );
     });
 
     it('should not call LLM when OCR fails', async () => {
-      mockOcr.extractText = vi.fn().mockResolvedValue(
-        err(new OcrError('Tesseract could not read the document')),
-      );
+      mockOcr.extractText = vi
+        .fn()
+        .mockResolvedValue(
+          err(new OcrError('Tesseract could not read the document')),
+        );
 
       await useCase.execute({ invoiceId: INVOICE_ID });
 

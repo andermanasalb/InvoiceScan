@@ -1,8 +1,5 @@
 import { Module } from '@nestjs/common';
-import {
-  LocalStorageAdapter,
-  STORAGE_TOKEN,
-} from './local-storage.adapter';
+import { LocalStorageAdapter, STORAGE_TOKEN } from './local-storage.adapter';
 
 /**
  * StorageModule

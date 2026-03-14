@@ -52,7 +52,9 @@ describe('AuthController (e2e)', () => {
           provide: APP_GUARD,
           useValue: {
             canActivate: (ctx: ExecutionContext) => {
-              const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+              const req = ctx
+                .switchToHttp()
+                .getRequest<{ user: AuthenticatedUser }>();
               req.user = FAKE_USER;
               return true;
             },
@@ -102,7 +104,9 @@ describe('AuthController (e2e)', () => {
       const setCookie = response.headers['set-cookie'] as string[] | string;
       const cookies = Array.isArray(setCookie) ? setCookie : [setCookie ?? ''];
       expect(cookies.some((c) => c.startsWith('refreshToken='))).toBe(true);
-      expect(cookies.some((c) => c.toLowerCase().includes('httponly'))).toBe(true);
+      expect(cookies.some((c) => c.toLowerCase().includes('httponly'))).toBe(
+        true,
+      );
     });
 
     it('should return 401 when credentials are invalid', async () => {
@@ -172,8 +176,7 @@ describe('AuthController (e2e)', () => {
 
   // A fake refresh token whose base64url-encoded payload contains
   // { sub: FAKE_USER.userId } — the controller decodes this to extract userId.
-  const FAKE_REFRESH_TOKEN =
-    'header.eyJzdWIiOiJ1c2VyLXV1aWQtMDAxIn0.sig';
+  const FAKE_REFRESH_TOKEN = 'header.eyJzdWIiOiJ1c2VyLXV1aWQtMDAxIn0.sig';
 
   describe('POST /api/v1/auth/refresh', () => {
     it('should return 200 with new accessToken when refresh cookie is valid', async () => {
@@ -245,7 +248,10 @@ describe('AuthController (e2e)', () => {
 
       expect(response.status).toBe(204);
       // Cookie must be cleared (value becomes empty or expires in the past)
-      const setCookie = response.headers['set-cookie'] as string[] | string | undefined;
+      const setCookie = response.headers['set-cookie'] as
+        | string[]
+        | string
+        | undefined;
       const cookies = Array.isArray(setCookie)
         ? setCookie
         : setCookie

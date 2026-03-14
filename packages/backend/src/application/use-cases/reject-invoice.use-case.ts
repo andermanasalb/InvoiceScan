@@ -8,7 +8,10 @@ import { AuditPort } from '../ports';
 import { EventBusPort } from '../ports/event-bus.port';
 import { RejectInvoiceInput, RejectInvoiceOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
-import { InvoiceNotFoundError, SelfActionNotAllowedError } from '../../domain/errors';
+import {
+  InvoiceNotFoundError,
+  SelfActionNotAllowedError,
+} from '../../domain/errors';
 import { InvoiceRejectedEvent } from '../../domain/events/invoice-rejected.event';
 
 export class RejectInvoiceUseCase {
@@ -26,7 +29,10 @@ export class RejectInvoiceUseCase {
     if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
 
     // Ownership check: non-admins cannot act on their own invoices
-    if (input.approverRole !== 'admin' && input.approverId === invoice.getUploaderId()) {
+    if (
+      input.approverRole !== 'admin' &&
+      input.approverId === invoice.getUploaderId()
+    ) {
       return err(new SelfActionNotAllowedError());
     }
 
@@ -41,7 +47,9 @@ export class RejectInvoiceUseCase {
         id: randomUUID(),
         invoiceId: invoice.getId(),
         from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        to: invoice.getStatus().getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+        to: invoice
+          .getStatus()
+          .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
         userId: input.approverId,
         timestamp: new Date(),
       });

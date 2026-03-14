@@ -1,6 +1,9 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { InvoiceQueueService, PROCESS_INVOICE_QUEUE } from './invoice-queue.service';
+import {
+  InvoiceQueueService,
+  PROCESS_INVOICE_QUEUE,
+} from './invoice-queue.service';
 
 @Module({
   imports: [

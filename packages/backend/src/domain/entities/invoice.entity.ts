@@ -144,7 +144,10 @@ export class Invoice {
   markValidationFailed(
     errors: string[],
   ): Result<void, InvalidStateTransitionError> {
-    const allowedFrom: string[] = [InvoiceStatusEnum.PROCESSING, InvoiceStatusEnum.EXTRACTED];
+    const allowedFrom: string[] = [
+      InvoiceStatusEnum.PROCESSING,
+      InvoiceStatusEnum.EXTRACTED,
+    ];
     if (!allowedFrom.includes(this.status.getValue())) {
       return err(
         new InvalidStateTransitionError(

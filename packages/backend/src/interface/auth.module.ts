@@ -10,12 +10,22 @@ import { DatabaseModule } from '../infrastructure/db/database.module';
 import { RedisTokenStoreAdapter } from '../infrastructure/auth/redis-token-store.adapter';
 import { JwtStrategy } from './http/guards/jwt.strategy';
 
-import { LoginUseCase, JwtSignPort } from '../application/use-cases/login.use-case';
-import { RefreshTokenUseCase, JwtVerifyPort, UserRoleLoader } from '../application/use-cases/refresh-token.use-case';
+import {
+  LoginUseCase,
+  JwtSignPort,
+} from '../application/use-cases/login.use-case';
+import {
+  RefreshTokenUseCase,
+  JwtVerifyPort,
+  UserRoleLoader,
+} from '../application/use-cases/refresh-token.use-case';
 import { LogoutUseCase } from '../application/use-cases/logout.use-case';
 import { CreateUserUseCase } from '../application/use-cases/create-user.use-case';
 import { AuthController } from './http/controllers/auth.controller';
-import { TOKEN_STORE_PORT, TokenStorePort } from '../application/ports/token-store.port';
+import {
+  TOKEN_STORE_PORT,
+  TokenStorePort,
+} from '../application/ports/token-store.port';
 import { USER_CREDENTIAL_REPOSITORY } from '../infrastructure/db/repositories';
 
 import type { UserRepository } from '../domain/repositories';
@@ -114,8 +124,10 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
     // ── Use cases ─────────────────────────────────────────────────────────
     {
       provide: CREATE_USER_USE_CASE_TOKEN,
-      useFactory: (userRepo: UserRepository, credentialRepo: UserCredentialRepository) =>
-        new CreateUserUseCase(userRepo, credentialRepo),
+      useFactory: (
+        userRepo: UserRepository,
+        credentialRepo: UserCredentialRepository,
+      ) => new CreateUserUseCase(userRepo, credentialRepo),
       inject: ['UserRepository', USER_CREDENTIAL_REPOSITORY],
     },
     {
@@ -126,7 +138,12 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
         tokenStore: TokenStorePort,
         signer: JwtSignPort,
       ) => new LoginUseCase(userRepo, credentialRepo, tokenStore, signer),
-      inject: ['UserRepository', USER_CREDENTIAL_REPOSITORY, TOKEN_STORE_PORT, 'JWT_SIGNER_VERIFIER'],
+      inject: [
+        'UserRepository',
+        USER_CREDENTIAL_REPOSITORY,
+        TOKEN_STORE_PORT,
+        'JWT_SIGNER_VERIFIER',
+      ],
     },
     {
       provide: REFRESH_TOKEN_USE_CASE,
@@ -143,6 +160,11 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
       inject: [TOKEN_STORE_PORT],
     },
   ],
-  exports: [JwtModule, PassportModule, TOKEN_STORE_PORT, CREATE_USER_USE_CASE_TOKEN],
+  exports: [
+    JwtModule,
+    PassportModule,
+    TOKEN_STORE_PORT,
+    CREATE_USER_USE_CASE_TOKEN,
+  ],
 })
 export class AuthModule {}

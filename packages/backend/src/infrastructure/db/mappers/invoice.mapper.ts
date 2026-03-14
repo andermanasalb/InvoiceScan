@@ -1,4 +1,7 @@
-import { Invoice, ExtractedData } from '../../../domain/entities/invoice.entity';
+import {
+  Invoice,
+  ExtractedData,
+} from '../../../domain/entities/invoice.entity';
 import {
   InvoiceAmount,
   InvoiceDate,
@@ -25,7 +28,7 @@ export class InvoiceMapper {
       orm.status as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
     )._unsafeUnwrap();
 
-    const raw = orm.extractedData as Record<string, unknown> | null;
+    const raw = orm.extractedData;
     const extractedData: ExtractedData | null = raw
       ? {
           rawText: (raw['rawText'] as string) ?? '',
@@ -68,8 +71,10 @@ export class InvoiceMapper {
     orm.amount = domain.getAmount().getValue();
     orm.date = domain.getDate().getValue();
     orm.status = domain.getStatus().getValue();
-    orm.extractedData =
-      domain.getExtractedData() as Record<string, unknown> | null;
+    orm.extractedData = domain.getExtractedData() as Record<
+      string,
+      unknown
+    > | null;
     orm.validationErrors = domain.getValidationErrors();
     orm.validatorId = domain.getValidatorId();
     orm.approverId = domain.getApproverId();

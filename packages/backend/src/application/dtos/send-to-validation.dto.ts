@@ -12,4 +12,6 @@ export const SendToValidationOutputSchema = z.object({
   status: z.string(),
   validatorId: z.string(),
 });
-export type SendToValidationOutput = z.infer<typeof SendToValidationOutputSchema>;
+export type SendToValidationOutput = z.infer<
+  typeof SendToValidationOutputSchema
+>;

@@ -17,7 +17,7 @@ function makeFile(
     fieldname: 'file',
     originalname: 'invoice.pdf',
     encoding: '7bit',
-    mimetype: 'application/pdf',  // client-supplied — the pipe does NOT trust this
+    mimetype: 'application/pdf', // client-supplied — the pipe does NOT trust this
     buffer: makePdfBuffer(),
     size: makePdfBuffer().length,
     stream: null as any,
@@ -47,12 +47,35 @@ function makePdfBuffer(): Buffer {
 function makePngBuffer(): Buffer {
   // PNG signature (8 bytes) + IHDR chunk length (4) + "IHDR" (4) + IHDR data (13)
   return Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, // PNG signature
-    0x00, 0x00, 0x00, 0x0d,                           // IHDR chunk length = 13
-    0x49, 0x48, 0x44, 0x52,                           // "IHDR"
-    0x00, 0x00, 0x00, 0x01,                           // width = 1
-    0x00, 0x00, 0x00, 0x01,                           // height = 1
-    0x08, 0x02, 0x00, 0x00, 0x00,                     // bit depth, color type, etc.
+    0x89,
+    0x50,
+    0x4e,
+    0x47,
+    0x0d,
+    0x0a,
+    0x1a,
+    0x0a, // PNG signature
+    0x00,
+    0x00,
+    0x00,
+    0x0d, // IHDR chunk length = 13
+    0x49,
+    0x48,
+    0x44,
+    0x52, // "IHDR"
+    0x00,
+    0x00,
+    0x00,
+    0x01, // width = 1
+    0x00,
+    0x00,
+    0x00,
+    0x01, // height = 1
+    0x08,
+    0x02,
+    0x00,
+    0x00,
+    0x00, // bit depth, color type, etc.
   ]);
 }
 
@@ -61,24 +84,21 @@ function makePngBuffer(): Buffer {
 // ---------------------------------------------------------------------------
 
 describe('FileValidationPipe', () => {
-  let pipe: FileValidationPipe;
-
-  // Vitest does not have beforeEach auto-injection — instantiate manually
-  pipe = new FileValidationPipe();
+  const pipe: FileValidationPipe = new FileValidationPipe();
 
   // --- missing file ---
 
   describe('when no file is provided', () => {
     it('should throw BadRequestException', async () => {
-      await expect(
-        pipe.transform(undefined as any, {} as any),
-      ).rejects.toThrow(BadRequestException);
+      await expect(pipe.transform(undefined as any, {} as any)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should include a descriptive message', async () => {
-      await expect(
-        pipe.transform(undefined as any, {} as any),
-      ).rejects.toThrow('No file uploaded');
+      await expect(pipe.transform(undefined as any, {} as any)).rejects.toThrow(
+        'No file uploaded',
+      );
     });
   });
 

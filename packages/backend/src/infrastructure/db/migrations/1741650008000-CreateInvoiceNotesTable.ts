@@ -21,7 +21,9 @@ export class CreateInvoiceNotesTable1741650008000 implements MigrationInterface 
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_invoice_notes_invoice_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_invoice_notes_invoice_id`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS invoice_notes`);
   }
 }

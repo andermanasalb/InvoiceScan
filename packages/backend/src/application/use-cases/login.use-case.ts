@@ -5,7 +5,7 @@ import { UserCredentialRepository } from '../../domain/repositories/user-credent
 import { TokenStorePort } from '../ports/token-store.port';
 import { LoginInput, LoginOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
-import { InvalidCredentialsError, UserNotFoundError } from '../../domain/errors';
+import { InvalidCredentialsError } from '../../domain/errors';
 
 /** TTL for refresh tokens: 7 days in seconds */
 const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
@@ -33,6 +33,7 @@ export class LoginUseCase {
     if (!credential) return err(new InvalidCredentialsError());
 
     // 3. Verify password
+
     const valid = await bcrypt.compare(input.password, credential.passwordHash);
     if (!valid) return err(new InvalidCredentialsError());
 

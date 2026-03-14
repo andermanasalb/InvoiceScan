@@ -2,9 +2,8 @@ import { DataSource, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { createTestDataSource, clearTables } from '../test/db-test.helper';
 import { AuditEventOrmEntity } from '../entities/audit-event.orm-entity';
-import { UserOrmEntity } from '../entities/user.orm-entity';
 import { AuditEventTypeOrmRepository } from '../repositories/audit-event.typeorm-repository';
-import { createAuditEvent, createUser } from '../../../domain/test/factories';
+import { createAuditEvent } from '../../../domain/test/factories';
 
 describe('AuditEventTypeOrmRepository (integration)', () => {
   let ds: DataSource;

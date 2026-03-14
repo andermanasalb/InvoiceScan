@@ -7,7 +7,10 @@ import { InvoiceStatusEnum } from '../../domain/value-objects';
 import { AuditPort } from '../ports';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError } from '../../domain/errors';
-import { RetryInvoiceInput, RetryInvoiceOutput } from '../dtos/retry-invoice.dto';
+import {
+  RetryInvoiceInput,
+  RetryInvoiceOutput,
+} from '../dtos/retry-invoice.dto';
 import type { InvoiceQueuePort } from '../../infrastructure/queue/invoice-queue.service';
 
 export class RetryInvoiceUseCase {
@@ -35,7 +38,9 @@ export class RetryInvoiceUseCase {
         id: randomUUID(),
         invoiceId: invoice.getId(),
         from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        to: invoice.getStatus().getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+        to: invoice
+          .getStatus()
+          .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
         userId: input.requesterId,
         timestamp: new Date(),
       });

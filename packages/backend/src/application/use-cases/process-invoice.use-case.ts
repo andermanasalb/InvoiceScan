@@ -65,7 +65,12 @@ export class ProcessInvoiceUseCase {
 
     // Persistir PROCESSING inmediatamente para que el frontend lo vea
     await this.invoiceRepo.save(invoice);
-    await this.recordEvent(invoice.getId(), prevStatus, invoice.getStatus().getValue(), uploaderId);
+    await this.recordEvent(
+      invoice.getId(),
+      prevStatus,
+      invoice.getStatus().getValue(),
+      uploaderId,
+    );
 
     // 3. Cargar el PDF desde storage
     const buffer = await this.storage.get(invoice.getFilePath());
@@ -78,7 +83,12 @@ export class ProcessInvoiceUseCase {
       const fromStatus = invoice.getStatus().getValue();
       invoice.markValidationFailed([ocrResult.error.message])._unsafeUnwrap();
       await this.invoiceRepo.save(invoice);
-      await this.recordEvent(invoice.getId(), fromStatus, invoice.getStatus().getValue(), uploaderId);
+      await this.recordEvent(
+        invoice.getId(),
+        fromStatus,
+        invoice.getStatus().getValue(),
+        uploaderId,
+      );
       await this.auditor.record({
         action: 'process',
         resourceId: invoice.getId(),
@@ -100,7 +110,12 @@ export class ProcessInvoiceUseCase {
       const fromStatus = invoice.getStatus().getValue();
       invoice.markValidationFailed([llmResult.error.message])._unsafeUnwrap();
       await this.invoiceRepo.save(invoice);
-      await this.recordEvent(invoice.getId(), fromStatus, invoice.getStatus().getValue(), uploaderId);
+      await this.recordEvent(
+        invoice.getId(),
+        fromStatus,
+        invoice.getStatus().getValue(),
+        uploaderId,
+      );
       await this.auditor.record({
         action: 'process',
         resourceId: invoice.getId(),
@@ -125,7 +140,12 @@ export class ProcessInvoiceUseCase {
 
     // 7. Persistir
     await this.invoiceRepo.save(invoice);
-    await this.recordEvent(invoice.getId(), fromStatus, invoice.getStatus().getValue(), uploaderId);
+    await this.recordEvent(
+      invoice.getId(),
+      fromStatus,
+      invoice.getStatus().getValue(),
+      uploaderId,
+    );
 
     // 8. Audit
     await this.auditor.record({

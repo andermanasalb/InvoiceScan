@@ -11,12 +11,7 @@ export class RedisTokenStoreAdapter implements TokenStorePort {
     refreshToken: string,
     ttlSeconds: number,
   ): Promise<void> {
-    await this.redis.set(
-      this.key(userId),
-      refreshToken,
-      'EX',
-      ttlSeconds,
-    );
+    await this.redis.set(this.key(userId), refreshToken, 'EX', ttlSeconds);
   }
 
   async get(userId: string): Promise<string | null> {

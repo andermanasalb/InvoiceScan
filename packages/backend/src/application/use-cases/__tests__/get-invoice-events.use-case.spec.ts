@@ -33,9 +33,11 @@ describe('GetInvoiceEventsUseCase', () => {
 
   beforeEach(() => {
     mockInvoiceRepo = {
-      findById: vi.fn().mockResolvedValue(
-        createInvoice({ id: INVOICE_ID, uploaderId: UPLOADER_ID }),
-      ),
+      findById: vi
+        .fn()
+        .mockResolvedValue(
+          createInvoice({ id: INVOICE_ID, uploaderId: UPLOADER_ID }),
+        ),
       findAll: vi.fn(),
       findByUploaderId: vi.fn(),
       save: vi.fn(),

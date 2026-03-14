@@ -16,11 +16,12 @@ export class InvoiceApprovedHandler {
   private readonly logger = new Logger(InvoiceApprovedHandler.name);
 
   @OnEvent('invoice.approved', { async: true })
-  async handle(event: InvoiceApprovedEvent): Promise<void> {
+  handle(event: InvoiceApprovedEvent): Promise<void> {
     this.logger.log('invoice.approved recibido (no-op)', {
       invoiceId: event.payload.invoiceId,
       approverId: event.payload.approverId,
       status: event.payload.status,
     });
+    return Promise.resolve();
   }
 }

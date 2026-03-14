@@ -20,10 +20,11 @@ export const NOTIFICATION_TOKEN = 'NOTIFICATION_TOKEN';
 export class NoOpNotificationAdapter implements NotificationPort {
   private readonly logger = new Logger(NoOpNotificationAdapter.name);
 
-  async notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void> {
+  notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void> {
     this.logger.log('Notification (no-op)', {
       invoiceId: payload.invoiceId,
       status: payload.status,
     });
+    return Promise.resolve();
   }
 }

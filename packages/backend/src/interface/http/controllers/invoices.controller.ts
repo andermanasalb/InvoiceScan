@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/only-throw-error */
 import {
   BadRequestException,
   Body,
@@ -38,12 +39,16 @@ export const LIST_INVOICES_USE_CASE_TOKEN = 'LIST_INVOICES_USE_CASE_TOKEN';
 export const GET_INVOICE_USE_CASE_TOKEN = 'GET_INVOICE_USE_CASE_TOKEN';
 export const APPROVE_INVOICE_USE_CASE_TOKEN = 'APPROVE_INVOICE_USE_CASE_TOKEN';
 export const REJECT_INVOICE_USE_CASE_TOKEN = 'REJECT_INVOICE_USE_CASE_TOKEN';
-export const GET_INVOICE_EVENTS_USE_CASE_TOKEN = 'GET_INVOICE_EVENTS_USE_CASE_TOKEN';
-export const SEND_TO_APPROVAL_USE_CASE_TOKEN = 'SEND_TO_APPROVAL_USE_CASE_TOKEN';
-export const SEND_TO_VALIDATION_USE_CASE_TOKEN = 'SEND_TO_VALIDATION_USE_CASE_TOKEN';
+export const GET_INVOICE_EVENTS_USE_CASE_TOKEN =
+  'GET_INVOICE_EVENTS_USE_CASE_TOKEN';
+export const SEND_TO_APPROVAL_USE_CASE_TOKEN =
+  'SEND_TO_APPROVAL_USE_CASE_TOKEN';
+export const SEND_TO_VALIDATION_USE_CASE_TOKEN =
+  'SEND_TO_VALIDATION_USE_CASE_TOKEN';
 export const RETRY_INVOICE_USE_CASE_TOKEN = 'RETRY_INVOICE_USE_CASE_TOKEN';
 export const ADD_NOTE_USE_CASE_TOKEN = 'ADD_NOTE_USE_CASE_TOKEN';
-export const GET_INVOICE_NOTES_USE_CASE_TOKEN = 'GET_INVOICE_NOTES_USE_CASE_TOKEN';
+export const GET_INVOICE_NOTES_USE_CASE_TOKEN =
+  'GET_INVOICE_NOTES_USE_CASE_TOKEN';
 
 /**
  * HTTP-layer query schema for GET /invoices.
@@ -151,8 +156,9 @@ export class InvoicesController {
   ) {
     const parsed = UploadBodySchema.safeParse(body);
     if (!parsed.success) {
-      const message = parsed.error.flatten().fieldErrors.providerId?.join(', ')
-        ?? 'providerId must be a valid UUID';
+      const message =
+        parsed.error.flatten().fieldErrors.providerId?.join(', ') ??
+        'providerId must be a valid UUID';
       throw new BadRequestException(message);
     }
 
@@ -187,11 +193,16 @@ export class InvoicesController {
   @HttpCode(HttpStatus.OK)
   async list(
     @CurrentUser() user: AuthenticatedUser,
-    @Query(new ZodValidationPipe(ListInvoicesQuerySchema)) query: ListInvoicesQuery,
+    @Query(new ZodValidationPipe(ListInvoicesQuerySchema))
+    query: ListInvoicesQuery,
   ) {
     const result = await this.listInvoicesUseCase.execute({
       requesterId: user.userId,
-      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
       status: query.status,
       page: query.page,
       limit: query.limit,
@@ -226,7 +237,11 @@ export class InvoicesController {
     const result = await this.getInvoiceUseCase.execute({
       invoiceId,
       requesterId: user.userId,
-      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
     });
 
     if (result.isErr()) {
@@ -314,7 +329,11 @@ export class InvoicesController {
     const result = await this.getInvoiceEventsUseCase.execute({
       invoiceId,
       requesterId: user.userId,
-      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
     });
 
     if (result.isErr()) {
@@ -343,7 +362,11 @@ export class InvoicesController {
     const result = await this.sendToValidationUseCase.execute({
       invoiceId,
       validatorId: user.userId,
-      validatorRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      validatorRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
     });
 
     if (result.isErr()) {
@@ -430,7 +453,11 @@ export class InvoicesController {
     const result = await this.getInvoiceNotesUseCase.execute({
       invoiceId,
       requesterId: user.userId,
-      requesterRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      requesterRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
     });
 
     if (result.isErr()) {

@@ -1,6 +1,9 @@
 import { ok, err, Result } from 'neverthrow';
 import { InvoiceRepository } from '../../domain/repositories';
-import { InvoiceNoteRepository, InvoiceNote } from '../../domain/repositories/invoice-note.repository';
+import {
+  InvoiceNoteRepository,
+  InvoiceNote,
+} from '../../domain/repositories/invoice-note.repository';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError } from '../../domain/errors';
 

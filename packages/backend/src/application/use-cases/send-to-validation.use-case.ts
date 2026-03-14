@@ -6,8 +6,14 @@ import { InvoiceEvent } from '../../domain/entities/invoice-event.entity';
 import { InvoiceStatusEnum } from '../../domain/value-objects';
 import { AuditPort } from '../ports';
 import { DomainError } from '../../domain/errors/domain.error';
-import { InvoiceNotFoundError, SelfActionNotAllowedError } from '../../domain/errors';
-import { SendToValidationInput, SendToValidationOutput } from '../dtos/send-to-validation.dto';
+import {
+  InvoiceNotFoundError,
+  SelfActionNotAllowedError,
+} from '../../domain/errors';
+import {
+  SendToValidationInput,
+  SendToValidationOutput,
+} from '../dtos/send-to-validation.dto';
 
 /**
  * SendToValidationUseCase
@@ -56,7 +62,9 @@ export class SendToValidationUseCase {
         id: randomUUID(),
         invoiceId: invoice.getId(),
         from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        to: invoice.getStatus().getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+        to: invoice
+          .getStatus()
+          .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
         userId: input.validatorId,
         timestamp: new Date(),
       });

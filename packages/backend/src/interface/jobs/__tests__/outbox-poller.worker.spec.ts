@@ -1,12 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { OutboxPollerWorker } from '../outbox-poller.worker';
-import type { OutboxEventRepository, OutboxEventRecord } from '../../../domain/repositories/outbox-event.repository';
+import type {
+  OutboxEventRepository,
+  OutboxEventRecord,
+} from '../../../domain/repositories/outbox-event.repository';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const makeRecord = (overrides?: Partial<OutboxEventRecord>): OutboxEventRecord => ({
+const makeRecord = (
+  overrides?: Partial<OutboxEventRecord>,
+): OutboxEventRecord => ({
   id: 'evt-' + Math.random().toString(36).slice(2),
   eventType: 'invoice.approved',
   payload: { invoiceId: 'inv-1', approverId: 'usr-1', status: 'APPROVED' },
@@ -38,10 +43,7 @@ describe('OutboxPollerWorker', () => {
       emitAsync: vi.fn().mockResolvedValue(undefined),
     };
 
-    worker = new OutboxPollerWorker(
-      mockOutboxRepo,
-      mockEventEmitter as never,
-    );
+    worker = new OutboxPollerWorker(mockOutboxRepo, mockEventEmitter as never);
   });
 
   afterEach(() => {
@@ -88,8 +90,14 @@ describe('OutboxPollerWorker', () => {
       await vi.advanceTimersByTimeAsync(10_000);
 
       expect(mockEventEmitter.emitAsync).toHaveBeenCalledTimes(2);
-      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith('invoice.approved', rec1);
-      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith('invoice.rejected', rec2);
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        'invoice.approved',
+        rec1,
+      );
+      expect(mockEventEmitter.emitAsync).toHaveBeenCalledWith(
+        'invoice.rejected',
+        rec2,
+      );
     });
 
     it('should mark each event as processed after emitting', async () => {
@@ -107,7 +115,8 @@ describe('OutboxPollerWorker', () => {
       const rec2 = makeRecord({ id: 'evt-bad', eventType: 'invoice.rejected' });
       mockOutboxRepo.findUnprocessed = vi.fn().mockResolvedValue([rec1, rec2]);
 
-      mockEventEmitter.emitAsync = vi.fn()
+      mockEventEmitter.emitAsync = vi
+        .fn()
         .mockResolvedValueOnce(undefined)
         .mockRejectedValueOnce(new Error('handler failed'));
 

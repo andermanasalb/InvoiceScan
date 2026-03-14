@@ -23,7 +23,8 @@ export const AUDIT_TOKEN = 'AUDIT_TOKEN';
 export class NoOpAuditAdapter implements AuditPort {
   private readonly logger = new Logger(NoOpAuditAdapter.name);
 
-  async record(entry: AuditEntryInput): Promise<void> {
+  record(entry: AuditEntryInput): Promise<void> {
     this.logger.log('Audit event (no-op)', entry);
+    return Promise.resolve();
   }
 }

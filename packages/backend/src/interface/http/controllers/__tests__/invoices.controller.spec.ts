@@ -137,15 +137,16 @@ describe('InvoicesController (e2e)', () => {
           provide: APP_GUARD,
           useValue: {
             canActivate: (ctx: ExecutionContext) => {
-              const req = ctx.switchToHttp().getRequest<{ user: AuthenticatedUser }>();
+              const req = ctx
+                .switchToHttp()
+                .getRequest<{ user: AuthenticatedUser }>();
               req.user = currentUser;
               return true;
             },
           },
         },
       ],
-    })
-      .compile();
+    }).compile();
 
     app = moduleRef.createNestApplication();
     await app.init();
@@ -161,7 +162,9 @@ describe('InvoicesController (e2e)', () => {
   const VALID_PROVIDER_ID = 'a1b2c3d4-e5f6-4789-abcd-ef0123456789';
 
   describe('POST /api/v1/invoices/upload', () => {
-    beforeAll(() => { currentUser = FAKE_USER; });
+    beforeAll(() => {
+      currentUser = FAKE_USER;
+    });
 
     it('should return 201 and the invoice data when a valid PDF and providerId are sent', async () => {
       const fakeOutput = {
@@ -268,11 +271,8 @@ describe('InvoicesController (e2e)', () => {
     it('should return 400 when the file is not a real PDF', async () => {
       // PNG magic bytes (full IHDR so file-type can detect it)
       const pngBuffer = Buffer.from([
-        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-        0x00, 0x00, 0x00, 0x0d,
-        0x49, 0x48, 0x44, 0x52,
-        0x00, 0x00, 0x00, 0x01,
-        0x00, 0x00, 0x00, 0x01,
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
         0x08, 0x02, 0x00, 0x00, 0x00,
       ]);
 
@@ -280,7 +280,7 @@ describe('InvoicesController (e2e)', () => {
         .post('/api/v1/invoices/upload')
         .field('providerId', VALID_PROVIDER_ID)
         .attach('file', pngBuffer, {
-          filename: 'sneaky.pdf',        // extension says PDF...
+          filename: 'sneaky.pdf', // extension says PDF...
           contentType: 'application/pdf', // header says PDF...
         });
 
@@ -292,7 +292,9 @@ describe('InvoicesController (e2e)', () => {
   // --- GET /invoices ---
 
   describe('GET /api/v1/invoices', () => {
-    beforeAll(() => { currentUser = FAKE_USER; });
+    beforeAll(() => {
+      currentUser = FAKE_USER;
+    });
 
     it('should return 200 with a paginated list of invoices', async () => {
       const fakeItems = [
@@ -313,8 +315,9 @@ describe('InvoicesController (e2e)', () => {
         value: { items: fakeItems, total: 1, page: 1, limit: 20 },
       });
 
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveLength(1);
@@ -329,11 +332,17 @@ describe('InvoicesController (e2e)', () => {
         value: { items: [], total: 0, page: 2, limit: 10 },
       });
 
-      await request(app.getHttpServer())
-        .get('/api/v1/invoices')
-        .query({ page: '2', limit: '10', status: 'PENDING', sort: 'createdAt:desc' });
+      await request(app.getHttpServer()).get('/api/v1/invoices').query({
+        page: '2',
+        limit: '10',
+        status: 'PENDING',
+        sort: 'createdAt:desc',
+      });
 
-      const callArg = mockListUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockListUseCase.execute.mock.calls.at(-1)?.[0] as Record<
+        string,
+        unknown
+      >;
       expect(callArg.page).toBe(2);
       expect(callArg.limit).toBe(10);
       expect(callArg.status).toBe('PENDING');
@@ -349,7 +358,10 @@ describe('InvoicesController (e2e)', () => {
 
       await request(app.getHttpServer()).get('/api/v1/invoices');
 
-      const callArg = mockListUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockListUseCase.execute.mock.calls.at(-1)?.[0] as Record<
+        string,
+        unknown
+      >;
       expect(callArg.requesterId).toBe(FAKE_USER.userId);
       expect(callArg.requesterRole).toBe('uploader');
     });
@@ -366,7 +378,9 @@ describe('InvoicesController (e2e)', () => {
   // --- GET /invoices/:id ---
 
   describe('GET /api/v1/invoices/:id', () => {
-    beforeAll(() => { currentUser = FAKE_USER; });
+    beforeAll(() => {
+      currentUser = FAKE_USER;
+    });
 
     const fakeInvoice = {
       invoiceId: 'inv-abc',
@@ -389,8 +403,9 @@ describe('InvoicesController (e2e)', () => {
         value: fakeInvoice,
       });
 
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-abc');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-abc',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data.invoiceId).toBe('inv-abc');
@@ -404,10 +419,12 @@ describe('InvoicesController (e2e)', () => {
         value: fakeInvoice,
       });
 
-      await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-abc');
+      await request(app.getHttpServer()).get('/api/v1/invoices/inv-abc');
 
-      const callArg = mockGetUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockGetUseCase.execute.mock.calls.at(-1)?.[0] as Record<
+        string,
+        unknown
+      >;
       expect(callArg.invoiceId).toBe('inv-abc');
       expect(callArg.requesterId).toBe(FAKE_USER.userId);
       expect(callArg.requesterRole).toBe('uploader');
@@ -422,8 +439,9 @@ describe('InvoicesController (e2e)', () => {
 
       // Without DomainErrorFilter wired in the test app this becomes a 500.
       // We only assert the error propagates (not a 200).
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-missing');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-missing',
+      );
 
       expect(response.status).not.toBe(200);
     });
@@ -432,7 +450,9 @@ describe('InvoicesController (e2e)', () => {
   // --- PATCH /invoices/:id/approve ---
 
   describe('PATCH /api/v1/invoices/:id/approve', () => {
-    beforeAll(() => { currentUser = FAKE_APPROVER; });
+    beforeAll(() => {
+      currentUser = FAKE_APPROVER;
+    });
 
     it('should return 200 with approved invoice data on success', async () => {
       const fakeOutput = {
@@ -447,8 +467,9 @@ describe('InvoicesController (e2e)', () => {
         value: fakeOutput,
       });
 
-      const response = await request(app.getHttpServer())
-        .patch('/api/v1/invoices/inv-approve-1/approve');
+      const response = await request(app.getHttpServer()).patch(
+        '/api/v1/invoices/inv-approve-1/approve',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data.invoiceId).toBe('inv-approve-1');
@@ -459,13 +480,20 @@ describe('InvoicesController (e2e)', () => {
       mockApproveUseCase.execute.mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
-        value: { invoiceId: 'inv-x', status: 'APPROVED', approverId: FAKE_APPROVER.userId },
+        value: {
+          invoiceId: 'inv-x',
+          status: 'APPROVED',
+          approverId: FAKE_APPROVER.userId,
+        },
       });
 
-      await request(app.getHttpServer())
-        .patch('/api/v1/invoices/inv-x/approve');
+      await request(app.getHttpServer()).patch(
+        '/api/v1/invoices/inv-x/approve',
+      );
 
-      const callArg = mockApproveUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockApproveUseCase.execute.mock.calls.at(
+        -1,
+      )?.[0] as Record<string, unknown>;
       expect(callArg.invoiceId).toBe('inv-x');
       expect(callArg.approverId).toBe(FAKE_APPROVER.userId);
     });
@@ -477,8 +505,9 @@ describe('InvoicesController (e2e)', () => {
         error: new InvoiceNotFoundError('inv-missing'),
       });
 
-      const response = await request(app.getHttpServer())
-        .patch('/api/v1/invoices/inv-missing/approve');
+      const response = await request(app.getHttpServer()).patch(
+        '/api/v1/invoices/inv-missing/approve',
+      );
 
       expect(response.status).not.toBe(200);
     });
@@ -490,8 +519,9 @@ describe('InvoicesController (e2e)', () => {
         error: new InvalidStateTransitionError('PENDING', 'APPROVED'),
       });
 
-      const response = await request(app.getHttpServer())
-        .patch('/api/v1/invoices/inv-pending/approve');
+      const response = await request(app.getHttpServer()).patch(
+        '/api/v1/invoices/inv-pending/approve',
+      );
 
       expect(response.status).not.toBe(200);
     });
@@ -500,7 +530,9 @@ describe('InvoicesController (e2e)', () => {
   // --- PATCH /invoices/:id/reject ---
 
   describe('PATCH /api/v1/invoices/:id/reject', () => {
-    beforeAll(() => { currentUser = FAKE_APPROVER; });
+    beforeAll(() => {
+      currentUser = FAKE_APPROVER;
+    });
 
     it('should return 200 with rejected invoice data on success', async () => {
       const fakeOutput = {
@@ -530,14 +562,21 @@ describe('InvoicesController (e2e)', () => {
       mockRejectUseCase.execute.mockResolvedValue({
         isOk: () => true,
         isErr: () => false,
-        value: { invoiceId: 'inv-y', status: 'REJECTED', approverId: FAKE_APPROVER.userId, reason: 'Bad total' },
+        value: {
+          invoiceId: 'inv-y',
+          status: 'REJECTED',
+          approverId: FAKE_APPROVER.userId,
+          reason: 'Bad total',
+        },
       });
 
       await request(app.getHttpServer())
         .patch('/api/v1/invoices/inv-y/reject')
         .send({ reason: 'Bad total' });
 
-      const callArg = mockRejectUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockRejectUseCase.execute.mock.calls.at(
+        -1,
+      )?.[0] as Record<string, unknown>;
       expect(callArg.invoiceId).toBe('inv-y');
       expect(callArg.approverId).toBe(FAKE_APPROVER.userId);
       expect(callArg.reason).toBe('Bad total');
@@ -591,7 +630,9 @@ describe('InvoicesController (e2e)', () => {
   // --- GET /invoices/:id/events ---
 
   describe('GET /api/v1/invoices/:id/events', () => {
-    beforeAll(() => { currentUser = FAKE_VALIDATOR; });
+    beforeAll(() => {
+      currentUser = FAKE_VALIDATOR;
+    });
 
     const fakeEvents = [
       {
@@ -619,8 +660,9 @@ describe('InvoicesController (e2e)', () => {
         value: fakeEvents,
       });
 
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-evt-1/events');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-evt-1/events',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveLength(2);
@@ -637,10 +679,13 @@ describe('InvoicesController (e2e)', () => {
         value: [],
       });
 
-      await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-evt-99/events');
+      await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-evt-99/events',
+      );
 
-      const callArg = mockGetEventsUseCase.execute.mock.calls.at(-1)?.[0] as Record<string, unknown>;
+      const callArg = mockGetEventsUseCase.execute.mock.calls.at(
+        -1,
+      )?.[0] as Record<string, unknown>;
       expect(callArg.invoiceId).toBe('inv-evt-99');
       expect(callArg.requesterId).toBe(FAKE_VALIDATOR.userId);
       expect(callArg.requesterRole).toBe('validator');
@@ -653,8 +698,9 @@ describe('InvoicesController (e2e)', () => {
         value: [],
       });
 
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-empty/events');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-empty/events',
+      );
 
       expect(response.status).toBe(200);
       expect(response.body.data).toHaveLength(0);
@@ -667,8 +713,9 @@ describe('InvoicesController (e2e)', () => {
         error: new InvoiceNotFoundError('inv-missing'),
       });
 
-      const response = await request(app.getHttpServer())
-        .get('/api/v1/invoices/inv-missing/events');
+      const response = await request(app.getHttpServer()).get(
+        '/api/v1/invoices/inv-missing/events',
+      );
 
       expect(response.status).not.toBe(200);
     });

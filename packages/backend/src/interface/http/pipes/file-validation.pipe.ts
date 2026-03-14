@@ -4,7 +4,6 @@ import {
   Injectable,
   PipeTransform,
 } from '@nestjs/common';
-
 /**
  * Maximum allowed upload size in bytes.
  * Reads MAX_UPLOAD_SIZE_MB from the environment (defaults to 10).
@@ -45,9 +44,10 @@ const ALLOWED_MIME = 'application/pdf';
  *   EXE  →  4D 5A        (MZ)
  */
 @Injectable()
-export class FileValidationPipe
-  implements PipeTransform<Express.Multer.File, Promise<Express.Multer.File>>
-{
+export class FileValidationPipe implements PipeTransform<
+  Express.Multer.File,
+  Promise<Express.Multer.File>
+> {
   async transform(
     file: Express.Multer.File,
     _meta: ArgumentMetadata,

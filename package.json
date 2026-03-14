@@ -10,10 +10,12 @@
     "build": "pnpm --filter '*' build",
     "lint": "pnpm --filter '*' lint",
     "typecheck": "pnpm --filter '*' typecheck",
-    "test": "pnpm --filter '*' test"
+    "test": "pnpm --filter '*' test",
+    "prepare": "husky"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
+    "husky": "^9.1.7",
     "kill-port": "^2.0.1",
     "wait-on": "^9.0.4"
   }

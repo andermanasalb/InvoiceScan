@@ -6,8 +6,14 @@ import { InvoiceEvent } from '../../domain/entities/invoice-event.entity';
 import { InvoiceStatusEnum } from '../../domain/value-objects';
 import { AuditPort } from '../ports';
 import { DomainError } from '../../domain/errors/domain.error';
-import { InvoiceNotFoundError, SelfActionNotAllowedError } from '../../domain/errors';
-import { SendToApprovalInput, SendToApprovalOutput } from '../dtos/send-to-approval.dto';
+import {
+  InvoiceNotFoundError,
+  SelfActionNotAllowedError,
+} from '../../domain/errors';
+import {
+  SendToApprovalInput,
+  SendToApprovalOutput,
+} from '../dtos/send-to-approval.dto';
 
 /**
  * SendToApprovalUseCase
@@ -35,12 +41,19 @@ export class SendToApprovalUseCase {
     if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
 
     // Ownership check 1: non-admins cannot act on their own invoices
-    if (input.validatorRole !== 'admin' && input.validatorId === invoice.getUploaderId()) {
+    if (
+      input.validatorRole !== 'admin' &&
+      input.validatorId === invoice.getUploaderId()
+    ) {
       return err(new SelfActionNotAllowedError());
     }
 
     // Ownership check 2: whoever validated the invoice cannot also send it to approval
-    if (input.validatorRole !== 'admin' && invoice.getValidatorId() !== null && input.validatorId === invoice.getValidatorId()) {
+    if (
+      input.validatorRole !== 'admin' &&
+      invoice.getValidatorId() !== null &&
+      input.validatorId === invoice.getValidatorId()
+    ) {
       return err(new SelfActionNotAllowedError());
     }
 
@@ -55,7 +68,9 @@ export class SendToApprovalUseCase {
         id: randomUUID(),
         invoiceId: invoice.getId(),
         from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        to: invoice.getStatus().getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+        to: invoice
+          .getStatus()
+          .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
         userId: input.validatorId,
         timestamp: new Date(),
       });

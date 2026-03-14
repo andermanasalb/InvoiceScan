@@ -3,7 +3,10 @@ import { RejectInvoiceUseCase } from '../reject-invoice.use-case';
 import { InvoiceRepository } from '../../../domain/repositories';
 import { AuditPort } from '../../ports';
 import { EventBusPort } from '../../ports/event-bus.port';
-import { createInvoice, createExtractedData } from '../../../domain/test/factories';
+import {
+  createInvoice,
+  createExtractedData,
+} from '../../../domain/test/factories';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 import { InvoiceRejectedEvent } from '../../../domain/events/invoice-rejected.event';
 
@@ -14,7 +17,9 @@ const VALIDATOR_ID = 'c3d4e5f6-a7b8-9012-cdef-123456789012';
 const makeReadyInvoice = () => {
   const invoice = createInvoice({ id: INVOICE_ID });
   invoice.startProcessing()._unsafeUnwrap();
-  invoice.markExtracted(createExtractedData({ rawText: 'test' }))._unsafeUnwrap();
+  invoice
+    .markExtracted(createExtractedData({ rawText: 'test' }))
+    ._unsafeUnwrap();
   invoice.markReadyForValidation(VALIDATOR_ID)._unsafeUnwrap();
   invoice.markReadyForApproval()._unsafeUnwrap();
   return invoice;
@@ -55,13 +60,23 @@ describe('RejectInvoiceUseCase', () => {
     });
 
     it('should persist the invoice after rejection', async () => {
-      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason: 'Invalid' });
+      await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason: 'Invalid',
+      });
 
       expect(mockRepo.save).toHaveBeenCalledOnce();
     });
 
     it('should record an audit event with action reject', async () => {
-      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason: 'Invalid' });
+      await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason: 'Invalid',
+      });
 
       expect(mockAudit.record).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'reject', userId: APPROVER_ID }),
@@ -70,10 +85,16 @@ describe('RejectInvoiceUseCase', () => {
 
     it('should publish an InvoiceRejectedEvent with correct payload', async () => {
       const reason = 'Amount does not match PO';
-      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason });
+      await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason,
+      });
 
       expect(mockEventBus.publish).toHaveBeenCalledOnce();
-      const publishedEvent = (mockEventBus.publish as ReturnType<typeof vi.fn>).mock.calls[0][0];
+      const publishedEvent = (mockEventBus.publish as ReturnType<typeof vi.fn>)
+        .mock.calls[0][0];
       expect(publishedEvent).toBeInstanceOf(InvoiceRejectedEvent);
       expect(publishedEvent.eventType).toBe('invoice.rejected');
       expect(publishedEvent.payload.invoiceId).toBe(INVOICE_ID);
@@ -85,7 +106,12 @@ describe('RejectInvoiceUseCase', () => {
     it('should return err when invoice is not found', async () => {
       mockRepo.findById = vi.fn().mockResolvedValue(null);
 
-      const result = await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason: 'Invalid' });
+      const result = await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason: 'Invalid',
+      });
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe('INVOICE_NOT_FOUND');
@@ -95,7 +121,12 @@ describe('RejectInvoiceUseCase', () => {
       const pendingInvoice = createInvoice({ id: INVOICE_ID });
       mockRepo.findById = vi.fn().mockResolvedValue(pendingInvoice);
 
-      const result = await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason: 'Invalid' });
+      const result = await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason: 'Invalid',
+      });
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe('INVALID_STATE_TRANSITION');
@@ -104,7 +135,12 @@ describe('RejectInvoiceUseCase', () => {
     it('should not publish event when invoice is not found', async () => {
       mockRepo.findById = vi.fn().mockResolvedValue(null);
 
-      await useCase.execute({ invoiceId: INVOICE_ID, approverId: APPROVER_ID, approverRole: 'approver', reason: 'Invalid' });
+      await useCase.execute({
+        invoiceId: INVOICE_ID,
+        approverId: APPROVER_ID,
+        approverRole: 'approver',
+        reason: 'Invalid',
+      });
 
       expect(mockEventBus.publish).not.toHaveBeenCalled();
     });

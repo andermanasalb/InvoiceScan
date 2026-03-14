@@ -53,7 +53,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
 
   describe('save', () => {
     it('should persist a new invoice to the database', async () => {
-      const invoice = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const invoice = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
 
       await repo.save(invoice);
 
@@ -65,7 +69,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
     });
 
     it('should update status when invoice transitions and is saved again', async () => {
-      const invoice = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const invoice = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
       await repo.save(invoice);
 
       invoice.startProcessing();
@@ -80,7 +88,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
 
   describe('findById', () => {
     it('should return a domain Invoice when found', async () => {
-      const invoice = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const invoice = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
       await repo.save(invoice);
 
       const found = await repo.findById(invoice.getId());
@@ -148,7 +160,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
     });
 
     it('should filter by status', async () => {
-      const pending = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const pending = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
       const processing = createInvoice({
         id: randomUUID(),
         uploaderId,
@@ -159,7 +175,9 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
       processing.startProcessing();
       await repo.save(processing);
 
-      const result = await repo.findAll({ status: InvoiceStatusEnum.PROCESSING });
+      const result = await repo.findAll({
+        status: InvoiceStatusEnum.PROCESSING,
+      });
 
       expect(result.total).toBe(1);
       expect(result.items[0].getStatus().getValue()).toBe(
@@ -172,7 +190,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
 
   describe('delete', () => {
     it('should remove the invoice from the database', async () => {
-      const invoice = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const invoice = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
       await repo.save(invoice);
 
       await repo.delete(invoice.getId());
@@ -186,7 +208,11 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
 
   describe('mapper round-trip', () => {
     it('should preserve all fields after save + findById', async () => {
-      const invoice = createInvoice({ id: randomUUID(), uploaderId, providerId });
+      const invoice = createInvoice({
+        id: randomUUID(),
+        uploaderId,
+        providerId,
+      });
       await repo.save(invoice);
 
       const found = await repo.findById(invoice.getId());

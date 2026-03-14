@@ -37,7 +37,12 @@ export class Provider {
    * Skips validation — data is assumed to be already valid.
    */
   static reconstruct(props: CreateProviderProps): Provider {
-    return new Provider(props.id, props.name, props.adapterType, props.createdAt);
+    return new Provider(
+      props.id,
+      props.name,
+      props.adapterType,
+      props.createdAt,
+    );
   }
 
   getId(): string {

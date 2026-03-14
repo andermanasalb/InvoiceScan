@@ -94,12 +94,16 @@ describe('Invoice', () => {
       invoice.startProcessing();
 
       // Act
-      const result = invoice.markExtracted(createExtractedData({ rawText: 'extracted text' }));
+      const result = invoice.markExtracted(
+        createExtractedData({ rawText: 'extracted text' }),
+      );
 
       // Assert
       expect(result.isOk()).toBe(true);
       expect(invoice.getStatus().getValue()).toBe(InvoiceStatusEnum.EXTRACTED);
-      expect(invoice.getExtractedData()).toEqual(createExtractedData({ rawText: 'extracted text' }));
+      expect(invoice.getExtractedData()).toEqual(
+        createExtractedData({ rawText: 'extracted text' }),
+      );
     });
 
     it('should return error when not in PROCESSING status', () => {
@@ -108,7 +112,9 @@ describe('Invoice', () => {
       // Still in PENDING
 
       // Act
-      const result = invoice.markExtracted(createExtractedData({ rawText: 'text' }));
+      const result = invoice.markExtracted(
+        createExtractedData({ rawText: 'text' }),
+      );
 
       // Assert
       expect(result.isErr()).toBe(true);

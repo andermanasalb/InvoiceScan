@@ -42,14 +42,16 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
       qb.andWhere('invoice.status = :status', { status: filters.status });
     }
 
-    const [sortField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(':');
+    const [sortField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(
+      ':',
+    );
     const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     qb.orderBy(`invoice.${sortField}`, order);
 
     qb.skip(skip).take(limit);
 
     const [orms, total] = await qb.getManyAndCount();
-    return { items: orms.map(InvoiceMapper.toDomain), total };
+    return { items: orms.map((orm) => InvoiceMapper.toDomain(orm)), total };
   }
 
   async findByUploaderId(
@@ -68,14 +70,16 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
       qb.andWhere('invoice.status = :status', { status: filters.status });
     }
 
-    const [sortField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(':');
+    const [sortField, sortOrder] = (filters.sort ?? 'createdAt:desc').split(
+      ':',
+    );
     const order = sortOrder?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
     qb.orderBy(`invoice.${sortField}`, order);
 
     qb.skip(skip).take(limit);
 
     const [orms, total] = await qb.getManyAndCount();
-    return { items: orms.map(InvoiceMapper.toDomain), total };
+    return { items: orms.map((orm) => InvoiceMapper.toDomain(orm)), total };
   }
 
   async save(invoice: Invoice): Promise<void> {

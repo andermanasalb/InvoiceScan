@@ -23,7 +23,8 @@ export class TesseractAdapter implements OcrPort {
     try {
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`OCR timed out after ${OCR_TIMEOUT_MS / 1000}s`)),
+          () =>
+            reject(new Error(`OCR timed out after ${OCR_TIMEOUT_MS / 1000}s`)),
           OCR_TIMEOUT_MS,
         ),
       );

@@ -94,7 +94,10 @@ describe('DomainErrorFilter', () => {
   describe('when the exception is a 409 DomainError', () => {
     it('should return 409 for InvalidStateTransitionError', () => {
       const { host, status } = makeHost();
-      filter.catch(new InvalidStateTransitionError('PENDING', 'APPROVED'), host);
+      filter.catch(
+        new InvalidStateTransitionError('PENDING', 'APPROVED'),
+        host,
+      );
       expect(status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
     });
 
@@ -127,7 +130,9 @@ describe('DomainErrorFilter', () => {
     it('should return 500 for unrecognised DomainError codes', () => {
       class WeirdError extends DomainError {
         readonly code = 'SOME_UNKNOWN_ERROR';
-        constructor() { super('something went wrong'); }
+        constructor() {
+          super('something went wrong');
+        }
       }
       const { host, status } = makeHost();
       filter.catch(new WeirdError(), host);

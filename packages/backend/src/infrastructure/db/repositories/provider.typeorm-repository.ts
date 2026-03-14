@@ -27,7 +27,7 @@ export class ProviderTypeOrmRepository implements ProviderRepository {
 
   async findAll(): Promise<Provider[]> {
     const orms = await this.repo.find({ order: { name: 'ASC' } });
-    return orms.map(ProviderMapper.toDomain);
+    return orms.map((orm) => ProviderMapper.toDomain(orm));
   }
 
   async save(provider: Provider): Promise<void> {

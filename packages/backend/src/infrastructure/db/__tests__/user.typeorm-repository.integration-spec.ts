@@ -3,7 +3,6 @@ import { randomUUID } from 'crypto';
 import { createTestDataSource, clearTables } from '../test/db-test.helper';
 import { UserOrmEntity } from '../entities/user.orm-entity';
 import { UserTypeOrmRepository } from '../repositories/user.typeorm-repository';
-import { UserMapper } from '../mappers/user.mapper';
 import { createUser } from '../../../domain/test/factories';
 
 describe('UserTypeOrmRepository (integration)', () => {

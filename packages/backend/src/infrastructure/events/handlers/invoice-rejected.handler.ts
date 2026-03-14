@@ -16,12 +16,13 @@ export class InvoiceRejectedHandler {
   private readonly logger = new Logger(InvoiceRejectedHandler.name);
 
   @OnEvent('invoice.rejected', { async: true })
-  async handle(event: InvoiceRejectedEvent): Promise<void> {
+  handle(event: InvoiceRejectedEvent): Promise<void> {
     this.logger.log('invoice.rejected recibido (no-op)', {
       invoiceId: event.payload.invoiceId,
       approverId: event.payload.approverId,
       reason: event.payload.reason,
       status: event.payload.status,
     });
+    return Promise.resolve();
   }
 }

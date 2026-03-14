@@ -22,7 +22,9 @@ export class CreateInvoiceEventsTable1741650005000 implements MigrationInterface
   }
 
   async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_invoice_events_invoice_id`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_invoice_events_invoice_id`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS invoice_events`);
   }
 }

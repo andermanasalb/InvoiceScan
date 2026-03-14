@@ -12,7 +12,9 @@ const defaultProps = (): CreateInvoiceProps => ({
   createdAt: new Date('2025-01-15'),
 });
 
-export const createInvoice = (overrides?: Partial<CreateInvoiceProps>): Invoice => {
+export const createInvoice = (
+  overrides?: Partial<CreateInvoiceProps>,
+): Invoice => {
   const props = { ...defaultProps(), ...overrides };
   return Invoice.create(props)._unsafeUnwrap();
 };

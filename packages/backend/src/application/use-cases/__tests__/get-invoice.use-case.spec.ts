@@ -13,16 +13,21 @@ describe('GetInvoiceUseCase', () => {
 
   beforeEach(() => {
     mockRepo = {
-      findById: vi.fn().mockResolvedValue(
-        createInvoice({ id: INVOICE_ID, uploaderId: UPLOADER_ID }),
-      ),
+      findById: vi
+        .fn()
+        .mockResolvedValue(
+          createInvoice({ id: INVOICE_ID, uploaderId: UPLOADER_ID }),
+        ),
       findAll: vi.fn(),
       findByUploaderId: vi.fn(),
       save: vi.fn(),
       delete: vi.fn(),
     };
 
-    useCase = new GetInvoiceUseCase(mockRepo, vi.fn().mockResolvedValue('uploader@example.com'));
+    useCase = new GetInvoiceUseCase(
+      mockRepo,
+      vi.fn().mockResolvedValue('uploader@example.com'),
+    );
   });
 
   describe('execute', () => {

@@ -1,7 +1,9 @@
 import { z } from 'zod';
 
 export const ConfigSchema = z.object({
-  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+  NODE_ENV: z
+    .enum(['development', 'test', 'production'])
+    .default('development'),
   PORT: z.coerce.number().default(3000),
   DATABASE_URL: z.string().url(),
   REDIS_URL: z.string().url(),
@@ -23,7 +25,10 @@ export type AppConfig = z.infer<typeof ConfigSchema>;
 export const validateConfig = (): AppConfig => {
   const result = ConfigSchema.safeParse(process.env);
   if (!result.success) {
-    console.error('Invalid environment variables:', result.error.flatten().fieldErrors);
+    console.error(
+      'Invalid environment variables:',
+      result.error.flatten().fieldErrors,
+    );
     process.exit(1);
   }
   return result.data;

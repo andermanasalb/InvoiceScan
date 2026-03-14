@@ -34,6 +34,7 @@ export class CreateUserUseCase {
     const user = userResult.value;
 
     // 3. Hashear la contraseña con bcrypt (salt rounds 12)
+
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_SALT_ROUNDS);
 
     // 4. Persistir usuario y credencial

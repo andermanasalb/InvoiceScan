@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { InvoiceQueueService, INVOICE_QUEUE_SERVICE_TOKEN } from '../invoice-queue.service';
+import {
+  InvoiceQueueService,
+  INVOICE_QUEUE_SERVICE_TOKEN,
+} from '../invoice-queue.service';
 
 const INVOICE_ID = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 

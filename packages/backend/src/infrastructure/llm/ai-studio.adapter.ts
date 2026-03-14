@@ -1,24 +1,28 @@
 import { ok, err, Result } from 'neverthrow';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { z } from 'zod';
-import type { LLMPort, LLMExtractionResult } from '../../application/ports/llm.port';
+import type {
+  LLMPort,
+  LLMExtractionResult,
+} from '../../application/ports/llm.port';
 import { LLMError } from '../../domain/errors/llm.errors';
 
 // ─── Zod schema para validar y coercionar la respuesta del LLM ───────────────
 
 const ExtractionSchema = z.object({
-  total:          z.union([z.number(), z.string().transform(Number)]).nullable(),
-  fecha:          z.string().nullable(),
-  numeroFactura:  z.string().nullable(),
-  nifEmisor:      z.string().nullable(),
-  nombreEmisor:   z.string().nullable(),
-  baseImponible:  z.union([z.number(), z.string().transform(Number)]).nullable(),
-  iva:            z.union([z.number(), z.string().transform(Number)]).nullable(),
+  total: z.union([z.number(), z.string().transform(Number)]).nullable(),
+  fecha: z.string().nullable(),
+  numeroFactura: z.string().nullable(),
+  nifEmisor: z.string().nullable(),
+  nombreEmisor: z.string().nullable(),
+  baseImponible: z.union([z.number(), z.string().transform(Number)]).nullable(),
+  iva: z.union([z.number(), z.string().transform(Number)]).nullable(),
 });
 
 // ─── Prompt ──────────────────────────────────────────────────────────────────
 
-const buildPrompt = (ocrText: string): string => `
+const buildPrompt = (ocrText: string): string =>
+  `
 Eres un asistente experto en extracción de datos de facturas españolas.
 
 A continuación tienes el texto extraído por OCR de una factura. Tu tarea es
@@ -71,7 +75,7 @@ export class AIStudioAdapter implements LLMPort {
       return err(
         new LLMError(
           'AISTUDIO_API_KEY no está configurada. ' +
-          'Añade AISTUDIO_API_KEY al .env para habilitar la extracción LLM.',
+            'Añade AISTUDIO_API_KEY al .env para habilitar la extracción LLM.',
         ),
       );
     }
@@ -85,7 +89,8 @@ export class AIStudioAdapter implements LLMPort {
 
       const timeout = new Promise<never>((_, reject) =>
         setTimeout(
-          () => reject(new Error(`LLM timed out after ${LLM_TIMEOUT_MS / 1000}s`)),
+          () =>
+            reject(new Error(`LLM timed out after ${LLM_TIMEOUT_MS / 1000}s`)),
           LLM_TIMEOUT_MS,
         ),
       );

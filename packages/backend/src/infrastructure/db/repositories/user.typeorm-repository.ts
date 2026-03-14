@@ -27,7 +27,7 @@ export class UserTypeOrmRepository implements UserRepository {
 
   async findAll(): Promise<User[]> {
     const orms = await this.repo.find({ order: { createdAt: 'ASC' } });
-    return orms.map(UserMapper.toDomain);
+    return orms.map((orm) => UserMapper.toDomain(orm));
   }
 
   async save(user: User): Promise<void> {

@@ -4,8 +4,14 @@ import { DatabaseModule } from '../../infrastructure/db/database.module';
 import { StorageModule } from '../../infrastructure/storage/storage.module';
 import { STORAGE_TOKEN } from '../../infrastructure/storage/local-storage.adapter';
 import { QueueModule } from '../../infrastructure/queue/queue.module';
-import { NoOpAuditAdapter, AUDIT_TOKEN } from '../../infrastructure/audit/no-op-audit.adapter';
-import { PdfParseAdapter, OCR_TOKEN } from '../../infrastructure/ocr/pdf-parse.adapter';
+import {
+  NoOpAuditAdapter,
+  AUDIT_TOKEN,
+} from '../../infrastructure/audit/no-op-audit.adapter';
+import {
+  PdfParseAdapter,
+  OCR_TOKEN,
+} from '../../infrastructure/ocr/pdf-parse.adapter';
 import { AIStudioAdapter } from '../../infrastructure/llm/ai-studio.adapter';
 import { LLM_TOKEN } from '../../application/ports/llm.port';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository';
@@ -16,9 +22,7 @@ import {
   ProcessInvoiceWorker,
   PROCESS_INVOICE_USE_CASE_TOKEN,
 } from './process-invoice.worker';
-import {
-  OutboxPollerWorker,
-} from './outbox-poller.worker';
+import { OutboxPollerWorker } from './outbox-poller.worker';
 import type { InvoiceRepository } from '../../domain/repositories';
 import type { InvoiceEventRepository } from '../../domain/repositories/invoice-event.repository';
 import type { StoragePort } from '../../application/ports/storage.port';
@@ -49,7 +53,8 @@ import type { LLMPort } from '../../application/ports/llm.port';
       provide: LLM_TOKEN,
       useFactory: (config: ConfigService) => {
         const apiKey = config.get<string>('AISTUDIO_API_KEY') ?? '';
-        const model = config.get<string>('AISTUDIO_MODEL') ?? 'gemini-1.5-flash';
+        const model =
+          config.get<string>('AISTUDIO_MODEL') ?? 'gemini-1.5-flash';
         return new AIStudioAdapter(apiKey, model);
       },
       inject: [ConfigService],
@@ -64,8 +69,23 @@ import type { LLMPort } from '../../application/ports/llm.port';
         auditor: AuditPort,
         llm: LLMPort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new ProcessInvoiceUseCase(invoiceRepo, storage, ocr, auditor, llm, invoiceEventRepo),
-      inject: ['InvoiceRepository', STORAGE_TOKEN, OCR_TOKEN, AUDIT_TOKEN, LLM_TOKEN, INVOICE_EVENT_REPOSITORY],
+      ) =>
+        new ProcessInvoiceUseCase(
+          invoiceRepo,
+          storage,
+          ocr,
+          auditor,
+          llm,
+          invoiceEventRepo,
+        ),
+      inject: [
+        'InvoiceRepository',
+        STORAGE_TOKEN,
+        OCR_TOKEN,
+        AUDIT_TOKEN,
+        LLM_TOKEN,
+        INVOICE_EVENT_REPOSITORY,
+      ],
     },
     // Worker — procesa jobs de la cola 'process-invoice'
     ProcessInvoiceWorker,

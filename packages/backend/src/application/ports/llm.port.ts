@@ -7,7 +7,7 @@ import { LLMError } from '../../domain/errors/llm.errors';
  */
 export interface LLMExtractionResult {
   total: number | null;
-  fecha: string | null;         // formato 'YYYY-MM-DD'
+  fecha: string | null; // formato 'YYYY-MM-DD'
   numeroFactura: string | null;
   nifEmisor: string | null;
   nombreEmisor: string | null;
@@ -16,7 +16,9 @@ export interface LLMExtractionResult {
 }
 
 export interface LLMPort {
-  extractInvoiceData(ocrText: string): Promise<Result<LLMExtractionResult, LLMError>>;
+  extractInvoiceData(
+    ocrText: string,
+  ): Promise<Result<LLMExtractionResult, LLMError>>;
 }
 
 export const LLM_TOKEN = 'LLMPort';

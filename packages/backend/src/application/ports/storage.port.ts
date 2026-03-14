@@ -1,5 +1,5 @@
 export interface StoredFile {
-  key: string;       // UUID-based key used to retrieve the file
+  key: string; // UUID-based key used to retrieve the file
   mimeType: string;
   sizeBytes: number;
 }

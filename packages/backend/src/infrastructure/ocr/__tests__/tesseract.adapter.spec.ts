@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ok, err } from 'neverthrow';
 
 // Mockeamos tesseract.js completo antes de importar el adapter
 vi.mock('tesseract.js', () => ({
@@ -13,7 +12,10 @@ const FAKE_PDF_BUFFER = Buffer.from('%PDF-1.4 fake content');
 
 describe('TesseractAdapter', () => {
   let adapter: TesseractAdapter;
-  let mockWorker: { recognize: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> };
+  let mockWorker: {
+    recognize: ReturnType<typeof vi.fn>;
+    terminate: ReturnType<typeof vi.fn>;
+  };
 
   beforeEach(() => {
     mockWorker = {
@@ -23,7 +25,9 @@ describe('TesseractAdapter', () => {
       terminate: vi.fn().mockResolvedValue(undefined),
     };
 
-    vi.mocked(Tesseract.createWorker).mockResolvedValue(mockWorker as unknown as Tesseract.Worker);
+    vi.mocked(Tesseract.createWorker).mockResolvedValue(
+      mockWorker as unknown as Tesseract.Worker,
+    );
 
     adapter = new TesseractAdapter();
   });
@@ -37,7 +41,9 @@ describe('TesseractAdapter', () => {
       const result = await adapter.extractText(FAKE_PDF_BUFFER);
 
       expect(result.isOk()).toBe(true);
-      expect(result._unsafeUnwrap().text).toBe('FACTURA 001\nTotal: 121,00 EUR');
+      expect(result._unsafeUnwrap().text).toBe(
+        'FACTURA 001\nTotal: 121,00 EUR',
+      );
       expect(result._unsafeUnwrap().confidence).toBe(87);
     });
 
@@ -54,7 +60,9 @@ describe('TesseractAdapter', () => {
     });
 
     it('should terminate the worker even if OCR throws', async () => {
-      mockWorker.recognize = vi.fn().mockRejectedValue(new Error('Tesseract internal error'));
+      mockWorker.recognize = vi
+        .fn()
+        .mockRejectedValue(new Error('Tesseract internal error'));
 
       await adapter.extractText(FAKE_PDF_BUFFER);
 
@@ -62,7 +70,9 @@ describe('TesseractAdapter', () => {
     });
 
     it('should return err(OcrError) when tesseract throws', async () => {
-      mockWorker.recognize = vi.fn().mockRejectedValue(new Error('Tesseract internal error'));
+      mockWorker.recognize = vi
+        .fn()
+        .mockRejectedValue(new Error('Tesseract internal error'));
 
       const result = await adapter.extractText(FAKE_PDF_BUFFER);
 

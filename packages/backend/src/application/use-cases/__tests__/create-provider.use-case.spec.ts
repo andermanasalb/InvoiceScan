@@ -20,7 +20,10 @@ describe('CreateProviderUseCase', () => {
 
   describe('execute', () => {
     it('should return ok with provider data when name is unique', async () => {
-      const result = await useCase.execute({ name: 'Telefonica', adapterType: 'telefonica' });
+      const result = await useCase.execute({
+        name: 'Telefonica',
+        adapterType: 'telefonica',
+      });
 
       expect(result.isOk()).toBe(true);
       expect(result._unsafeUnwrap().name).toBe('Telefonica');
@@ -36,7 +39,10 @@ describe('CreateProviderUseCase', () => {
     it('should return err when provider name already exists', async () => {
       mockRepo.findByName = vi.fn().mockResolvedValue(createProvider());
 
-      const result = await useCase.execute({ name: 'Telefonica', adapterType: 'telefonica' });
+      const result = await useCase.execute({
+        name: 'Telefonica',
+        adapterType: 'telefonica',
+      });
 
       expect(result.isErr()).toBe(true);
       expect(result._unsafeUnwrapErr().code).toBe('PROVIDER_ALREADY_EXISTS');

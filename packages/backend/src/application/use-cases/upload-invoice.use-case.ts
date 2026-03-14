@@ -21,7 +21,9 @@ export class UploadInvoiceUseCase {
     input: UploadInvoiceInput,
   ): Promise<Result<UploadInvoiceOutput, DomainError>> {
     if (!input.providerId || input.providerId.trim().length === 0) {
-      return err(new InvalidFieldError('providerId', 'Provider ID cannot be empty'));
+      return err(
+        new InvalidFieldError('providerId', 'Provider ID cannot be empty'),
+      );
     }
 
     // Default amount and date — will be replaced after OCR in FASE 5

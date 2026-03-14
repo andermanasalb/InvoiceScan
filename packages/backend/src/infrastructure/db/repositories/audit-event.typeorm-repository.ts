@@ -46,7 +46,7 @@ export class AuditEventTypeOrmRepository implements AuditEventRepository {
     qb.orderBy('audit.timestamp', 'DESC');
 
     const orms = await qb.getMany();
-    return orms.map(AuditEventMapper.toDomain);
+    return orms.map((orm) => AuditEventMapper.toDomain(orm));
   }
 
   async save(event: AuditEvent): Promise<void> {

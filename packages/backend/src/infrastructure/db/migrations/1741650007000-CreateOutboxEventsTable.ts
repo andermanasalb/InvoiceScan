@@ -35,7 +35,9 @@ export class CreateOutboxEventsTable1741650007000 implements MigrationInterface 
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP INDEX IF EXISTS idx_outbox_events_unprocessed`);
+    await queryRunner.query(
+      `DROP INDEX IF EXISTS idx_outbox_events_unprocessed`,
+    );
     await queryRunner.query(`DROP TABLE IF EXISTS outbox_events`);
   }
 }
