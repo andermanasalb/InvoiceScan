@@ -1,0 +1,14 @@
+[allowlist]
+description = "False positives — placeholder tokens in NestJS boilerplate and test fixtures"
+
+regexes = [
+  # NestJS boilerplate badge URL: ?token=abc123def456
+  '''token=abc123def456''',
+  # Fake JWT in auth controller spec (3-part dot-separated test value)
+  '''header\.eyJzdWIiOiJ1c2VyLXV1aWQtMDAxIn0\.sig''',
+]
+
+paths = [
+  # NestJS-generated README — contains a badge URL with a placeholder token string
+  '''packages/backend/README\.md''',
+]
