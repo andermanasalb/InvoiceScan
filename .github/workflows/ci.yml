@@ -58,7 +58,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Audit dependencies
-        run: pnpm --filter backend audit --audit-level=high
+        run: pnpm audit --audit-level=high
+        working-directory: packages/backend
 
   frontend:
     name: Frontend quality checks
