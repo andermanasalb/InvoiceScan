@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InvoiceApprovedEvent } from '../../../domain/events/invoice-approved.event';
 import type { NotificationPort } from '../../../application/ports/notification.port';
@@ -19,9 +20,9 @@ export const NOTIFICATION_TOKEN = 'NOTIFICATION_TOKEN';
  */
 @Injectable()
 export class InvoiceApprovedHandler {
-  private readonly logger = new Logger(InvoiceApprovedHandler.name);
-
   constructor(
+    @InjectPinoLogger(InvoiceApprovedHandler.name)
+    private readonly logger: PinoLogger,
     @Inject(NOTIFICATION_TOKEN)
     private readonly notifier: NotificationPort,
     @Inject('InvoiceRepository')
@@ -36,11 +37,11 @@ export class InvoiceApprovedHandler {
   async handle(event: InvoiceApprovedEvent): Promise<void> {
     const { invoiceId, approverId } = event.payload;
 
-    this.logger.log('invoice.approved received', { invoiceId, approverId });
+    this.logger.info({ invoiceId, approverId }, 'invoice.approved received');
 
     const invoice = await this.invoiceRepo.findById(invoiceId);
     if (!invoice) {
-      this.logger.warn('Invoice not found for notification', { invoiceId });
+      this.logger.warn({ invoiceId }, 'Invoice not found for notification');
       return;
     }
 
@@ -62,10 +63,8 @@ export class InvoiceApprovedHandler {
     const toEmails = [...emailSet];
     if (!toEmails.length) {
       this.logger.warn(
+        { invoiceId },
         'No recipients resolved for approved notification — skipping',
-        {
-          invoiceId,
-        },
       );
       return;
     }

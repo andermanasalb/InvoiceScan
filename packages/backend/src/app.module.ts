@@ -6,6 +6,7 @@
  * - Importar módulos de infraestructura transversal: ConfigModule, BullMQ,
  *   EventEmitter y DatabaseModule.
  * - Montar Bull Board UI de monitoreo de colas SOLO en entornos no-producción.
+ * - Configurar nestjs-pino como logger global con traceId propagado via OTel.
  *
  * Nota sobre el orden de guards:
  *   JwtAuthGuard corre primero (pobla request.user desde el JWT).
@@ -20,6 +21,8 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { LoggerModule } from 'nestjs-pino';
+import { trace } from '@opentelemetry/api';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
 import { AdminModule } from './admin.module';
@@ -65,6 +68,38 @@ const bullBoardModules =
   imports: [
     // ConfigService disponible globalmente (JwtStrategy, AIStudioAdapter, etc.)
     ConfigModule.forRoot({ isGlobal: true }),
+
+    // ── Structured JSON logger with OTel traceId propagation ──────────────
+    // In production: JSON output with traceId/spanId injected automatically.
+    // In development: pretty-printed output for readability.
+    // PinoLogger replaces the built-in NestJS Logger in all classes.
+    LoggerModule.forRoot({
+      pinoHttp: {
+        level: config.NODE_ENV === 'production' ? 'info' : 'debug',
+        transport:
+          config.NODE_ENV !== 'production'
+            ? { target: 'pino-pretty', options: { colorize: true } }
+            : undefined,
+        // Inject OTel traceId + spanId into every log record
+        mixin() {
+          const activeSpan = trace.getActiveSpan();
+          if (!activeSpan) return {};
+          const ctx = activeSpan.spanContext();
+          return {
+            traceId: ctx.traceId,
+            spanId: ctx.spanId,
+          };
+        },
+        autoLogging: {
+          ignore: (req) => (req as { url?: string }).url === '/api/v1/health',
+        },
+        serializers: {
+          req(req: { method: string; url: string }) {
+            return { method: req.method, url: req.url };
+          },
+        },
+      },
+    }),
 
     // Bus de eventos in-process. Los handlers (@OnEvent) escuchan aquí.
     // El OutboxPollerWorker emite aquí tras leer outbox_events.

@@ -2696,4 +2696,881 @@ feat(api): HTTP controllers, EventBus, Outbox pattern (FASE 9)
 
 ---
 
+---
+
+### FASE 10 — Frontend React: dashboard, listado, detalle y upload
+
+**¿Qué hicimos?**
+
+Construimos la interfaz de usuario completa usando **Next.js 15** con App Router, **shadcn/ui** como librería de componentes, **TanStack Query** para la gestión del estado del servidor y **Tailwind CSS v4** para los estilos. El frontend consume la API REST del backend y respeta los roles de usuario: cada rol ve solo lo que le corresponde.
+
+---
+
+#### Bloque 1 — Estructura y tecnologías del frontend
+
+**¿Por qué Next.js con App Router?**
+
+Next.js es el framework de React más usado en producción. El App Router (introducido en Next.js 13) usa React Server Components por defecto, lo que mejora el rendimiento inicial y el SEO. Para una aplicación de gestión de facturas que no necesita SSR agresivo, lo usamos principalmente en modo cliente (`'use client'`), pero la estructura nos da acceso a layouts anidados, rutas de grupo y gestión de metadatos.
+
+**¿Por qué TanStack Query?**
+
+TanStack Query (antes React Query) gestiona el ciclo de vida completo del estado asíncrono:
+- **Caché automático**: no hace la misma petición dos veces si los datos están frescos.
+- **Refetch inteligente**: refresca automáticamente los datos cuando el usuario vuelve a la pestaña.
+- **Estados de carga y error**: `isLoading`, `isError`, `data` disponibles directamente.
+- **Mutaciones**: `useMutation` gestiona las operaciones POST/PATCH con callbacks `onSuccess`/`onError`.
+
+Sin TanStack Query, habría que gestionar manualmente `useEffect`, `useState` para loading, cancellation, y la invalidación del caché — mucho código repetitivo y propenso a bugs.
+
+**¿Por qué shadcn/ui?**
+
+shadcn/ui no es una librería de componentes instalada como dependencia — es una colección de componentes que se copian directamente en el proyecto y se pueden modificar libremente. Cada componente usa Radix UI (accesibilidad) + Tailwind CSS (estilos). Ventajas:
+- Control total sobre el código de los componentes.
+- No dependes de actualizaciones de una librería externa para cambiar estilos.
+- Accesibilidad garantizada por Radix UI (teclado, ARIA, foco).
+
+---
+
+#### Bloque 2 — Autenticación y contexto de usuario
+
+El contexto de autenticación (`AuthContext`) gestiona el estado global del usuario:
+
+```typescript
+// packages/frontend/context/auth-context.tsx
+
+interface AuthContextType {
+  user: AuthUser | null;    // { userId, role, accessToken }
+  login: (email, password) => Promise<void>;
+  logout: () => Promise<void>;
+  isLoading: boolean;
+}
+```
+
+El `accessToken` se guarda en memoria (en el estado de React), no en `localStorage`. Así es inmune a ataques XSS. El `refreshToken` vive en la cookie HttpOnly que el backend gestiona automáticamente.
+
+**Interceptor de Axios para renovar el token:**
+
+```typescript
+// packages/frontend/lib/api.ts
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    if (error.response?.status === 401 && !error.config._retry) {
+      error.config._retry = true;
+      try {
+        const { data } = await api.post('/auth/refresh');
+        const newToken = data.data.accessToken;
+        // Actualizar el token en memoria y reintentar la petición
+        error.config.headers['Authorization'] = `Bearer ${newToken}`;
+        return api(error.config);
+      } catch {
+        // Refresh falló → sesión expirada → redirigir al login
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+```
+
+Cuando el backend devuelve un 401 (token expirado), el interceptor intenta renovarlo silenciosamente. Si la renovación tiene éxito, reintenta la petición original. El usuario no se da cuenta de que su token expiró. Solo ve el login si el refresh token también expiró (después de 7 días).
+
+---
+
+#### Bloque 3 — Páginas implementadas
+
+**`/login`** — Formulario de login con React Hook Form + Zod. Muestra errores de validación campo a campo. Redirige al dashboard tras login exitoso.
+
+**`/dashboard`** — Vista principal con:
+- **Tarjetas de estadísticas**: total de facturas por estado (pendientes, en proceso, aprobadas, rechazadas).
+- **Gráfico de actividad reciente**: usando Recharts para mostrar el volumen de facturas por semana.
+- **Tabla de facturas recientes**: las últimas 5 facturas con acceso rápido.
+
+**`/invoices`** — Listado completo con:
+- Filtros por estado (dropdown) y ordenación por fecha.
+- Paginación con controles prev/next.
+- Cada fila muestra el estado con un badge de color (`APPROVED` = verde, `REJECTED` = rojo, etc.).
+- Botón para abrir el detalle de cada factura.
+
+**`/invoices/:id`** — Detalle con:
+- Datos extraídos por el LLM: número de factura, proveedor, NIF, importe, fecha, IVA.
+- Estado actual con historial de transiciones.
+- **Botones de acción según rol y estado**: `approver` ve "Approve" y "Reject" si la factura está en `READY_FOR_APPROVAL`. `validator` ve "Send to Approval" si está en `READY_FOR_VALIDATION`. Estos botones son condicionales — no aparecen si el rol o el estado no lo permiten.
+- Sección de notas con formulario para añadir.
+
+**`/upload`** — Formulario de subida de PDF con:
+- Zona de drag-and-drop usando `react-dropzone`.
+- Selector de proveedor (dropdown con los proveedores disponibles).
+- Barra de progreso durante el upload.
+- Mensaje de éxito con enlace al detalle de la factura creada.
+
+---
+
+#### Bloque 4 — Role-aware UI
+
+La interfaz adapta su contenido al rol del usuario autenticado. La información del rol viene del JWT decodificado en el `AuthContext`.
+
+```typescript
+// Ejemplo: botones de acción condicionales en el detalle
+const canApprove =
+  user?.role === 'approver' &&
+  invoice.status === 'READY_FOR_APPROVAL';
+
+const canSendToApproval =
+  ['validator', 'approver', 'admin'].includes(user?.role ?? '') &&
+  invoice.status === 'READY_FOR_VALIDATION';
+```
+
+Los uploaders solo ven sus propias facturas (el backend lo filtra), mientras que validators, approvers y admins ven todas. El frontend no necesita implementar este filtro — el backend ya devuelve solo lo que cada usuario puede ver.
+
+---
+
+**Resumen al cerrar FASE 10 (parcial):**
+
+| Página | Estado |
+|---|---|
+| Login | ✅ Completa |
+| Dashboard con stats | ✅ Completa |
+| Listado de facturas | ✅ Completa |
+| Detalle de factura | ✅ Completa |
+| Upload de PDF | ✅ Completa |
+| Página de proveedores (admin) | Pendiente |
+| Página de usuarios (admin) | Pendiente |
+| Export UI | Pendiente |
+| Responsive mobile | Pendiente |
+
+**Commit de cierre:**
+```
+feat(frontend): add Next.js frontend with dashboard, invoice list/detail, upload and login
+```
+
+---
+
+### FASE 11 — Emails con Resend: notificaciones reales en cada transición
+
+**¿Qué hicimos?**
+
+Implementamos el envío real de emails usando **Resend** (el SDK moderno de envío de emails, que reemplaza a Nodemailer como estaba planificado en CLAUDE.md). Los emails se envían en cada transición importante del workflow de facturas: cuando se envía a validación, cuando se envía a aprobación, cuando se aprueba y cuando se rechaza.
+
+La arquitectura del patrón Outbox de FASE 9 brilla aquí: para activar los emails, **no tocamos ni una línea** de los use cases ni de los controllers. Solo implementamos los handlers de eventos.
+
+---
+
+#### Bloque 1 — Por qué Resend en lugar de Nodemailer
+
+El CLAUDE.md planificaba usar Nodemailer. Sin embargo, Resend ofrece varias ventajas sobre Nodemailer para un proyecto de producción:
+
+| | Nodemailer | Resend |
+|---|---|---|
+| **Envío real** | Requiere configurar SMTP (Gmail, Mailgun...) | API HTTP simple con `RESEND_API_KEY` |
+| **Deliverability** | Depende del servidor SMTP elegido | Infraestructura optimizada para entregabilidad |
+| **Errores tipados** | Error genérico de Node.js | Objeto `{ data, error }` tipado |
+| **SDK** | Solo Node.js | SDK oficial para múltiples lenguajes |
+| **Desarrollo local** | Necesita cuenta y servidor SMTP real | Funciona con clave de prueba en sandbox |
+
+La decisión se registra como divergencia del plan original con justificación técnica.
+
+---
+
+#### Bloque 2 — `NotificationPort` y `ResendAdapter`
+
+**`NotificationPort`** (ya existía desde FASE 9) define el contrato:
+
+```typescript
+// packages/backend/src/application/ports/notification.port.ts
+
+export type NotificationEventType =
+  | 'sent_for_validation'
+  | 'sent_for_validation_self'
+  | 'sent_for_approval'
+  | 'approved'
+  | 'rejected';
+
+export interface InvoiceNotificationPayload {
+  eventType: NotificationEventType;
+  invoiceId: string;
+  toEmails: string[];           // destinatarios ya resueltos por el handler
+  invoiceNumber?: string;       // datos extraídos por el LLM (opcionales)
+  vendorName?: string;
+  amount?: number | null;
+  actorEmail?: string;          // quién realizó la acción
+  latestNote?: string;          // última nota añadida a la factura
+  rejectionReason?: string;     // solo en rejected
+}
+
+export interface NotificationPort {
+  notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void>;
+}
+```
+
+**`ResendAdapter`** implementa `NotificationPort`:
+
+```typescript
+// packages/backend/src/infrastructure/notification/resend.adapter.ts
+
+export class ResendAdapter implements NotificationPort {
+  private readonly resend: Resend;
+  private readonly logger = new Logger(ResendAdapter.name);
+
+  constructor(
+    apiKey: string,
+    private readonly fromEmail: string,
+  ) {
+    this.resend = new Resend(apiKey);
+  }
+
+  async notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void> {
+    if (!payload.toEmails.length) return;  // sin destinatarios → no hacer nada
+
+    const template = this.resolveTemplate(payload);
+
+    for (const recipient of payload.toEmails) {
+      const idempotencyKey = `${payload.eventType}/${payload.invoiceId}/${recipient}`;
+
+      const { error } = await this.resend.emails.send({
+        from: this.fromEmail,
+        to: [recipient],
+        subject: template.subject,
+        html: template.html,
+        headers: {
+          'X-Entity-Ref-ID': idempotencyKey,  // idempotencia en Resend
+        },
+      });
+
+      if (error) {
+        this.logger.error('Failed to send email via Resend', {
+          invoiceId: payload.invoiceId,
+          recipient,
+          error: error.message,
+        });
+        // Nunca lanzar — un email fallido no debe crashear el worker del outbox
+      }
+    }
+  }
+}
+```
+
+**Puntos clave del diseño:**
+
+**Un email por destinatario**: en lugar de enviar un email con múltiples destinatarios en `to[]`, enviamos un email individual a cada receptor. Esto permite la idempotencia a nivel de `(eventType, invoiceId, recipient)` — si el outbox reintenta el evento, Resend detecta la clave duplicada y descarta el duplicado.
+
+**Idempotencia con `X-Entity-Ref-ID`**: la cabecera personalizada `X-Entity-Ref-ID` actúa como clave de idempotencia en Resend. Si el mismo email se intenta enviar dos veces con la misma clave (porque el outbox reintentó el evento), Resend descarta el segundo. Esto garantiza que el usuario nunca recibe el mismo email dos veces.
+
+**Nunca lanzar en caso de error**: si Resend devuelve un error, lo logueamos pero no lanzamos. Si el `ResendAdapter` lanzase una excepción, el `OutboxPollerWorker` la capturaría y no marcaría el evento como procesado — causando que se reintente infinitamente. El email fallido se loguea y se acepta la pérdida.
+
+**`ResendAdapter` no es `@Injectable()`** — se instancia manualmente con `new ResendAdapter(apiKey, fromEmail)` en `notification.module.ts`. Por eso mantiene `new Logger()` en lugar de `@InjectPinoLogger`.
+
+---
+
+#### Bloque 3 — Templates HTML de email
+
+Los templates están en `src/infrastructure/notification/email-templates.ts`. Son funciones puras que reciben el payload y devuelven `{ subject: string, html: string }`.
+
+```typescript
+// Ejemplo: template de aprobación
+export function approvedTemplate(payload: InvoiceNotificationPayload) {
+  return {
+    subject: `Invoice ${payload.invoiceNumber ?? payload.invoiceId} Approved`,
+    html: layout(`
+      <h2>Invoice Approved</h2>
+      ${invoiceDetails(payload)}
+      ${payload.actorEmail ? `<p>Approved by: <strong>${escapeHtml(payload.actorEmail)}</strong></p>` : ''}
+      ${payload.latestNote ? noteSection(payload.latestNote) : ''}
+    `),
+  };
+}
+```
+
+**Templates implementados:**
+
+| Template | Destinatario | Evento |
+|---|---|---|
+| `sentForValidationTemplate` | Validator asignado al uploader | Uploader envía a validación |
+| `sentForValidationSelfTemplate` | Approver asignado al validator | Validator/approver/admin sube su propia factura |
+| `sentForApprovalTemplate` | Approver asignado al validator | Validator envía a aprobación |
+| `approvedTemplate` | Uploader + validator | Approver aprueba la factura |
+| `rejectedTemplate` | Uploader + validator | Approver rechaza con razón |
+
+**`escapeHtml`**: todos los campos de datos del usuario (nombre del proveedor, razón de rechazo, nota) pasan por `escapeHtml` antes de insertarse en el HTML. Esto previene XSS en el email — si el razón de rechazo contiene `<script>alert('XSS')</script>`, se convierte en texto escapado y no en JavaScript ejecutable.
+
+---
+
+#### Bloque 4 — Handlers de eventos con lógica de notificación
+
+Los 4 handlers implementados en FASE 9 como no-op ahora tienen lógica real. Cada handler:
+1. Recibe el evento del OutboxPollerWorker via `@OnEvent(...)`.
+2. Carga la factura y los usuarios relacionados del repositorio.
+3. Resuelve los destinatarios según la lógica de negocio del evento.
+4. Llama a `notifier.notifyStatusChange(...)`.
+
+**`InvoiceApprovedHandler`** y **`InvoiceRejectedHandler`**: notifican tanto al **uploader** como al **validator** (ambos son partes interesadas cuando se aprueba o rechaza). Los emails se deduplicarán si son la misma persona (validator que subió su propia factura).
+
+```typescript
+// Deduplicación via Set
+const emailSet = new Set<string>();
+const uploader = await this.userRepo.findById(uploaderId);
+if (uploader) emailSet.add(uploader.getEmail());
+if (validatorId) {
+  const validator = await this.userRepo.findById(validatorId);
+  if (validator) emailSet.add(validator.getEmail());
+}
+const toEmails = [...emailSet]; // sin duplicados
+```
+
+**`InvoiceSentForApprovalHandler`**: notifica al **approver asignado al validator** que revisó la factura. Resuelve el approver usando `AssignmentRepository.getAssignedApproverForValidator(validatorId)`.
+
+**`InvoiceSentForValidationHandler`**: lógica con dos flujos:
+- **Flujo normal** (actor es `uploader`): notifica al validator asignado al uploader.
+- **Flujo self-upload** (actor es `validator`, `approver` o `admin`): notifica al approver asignado a ese validator. El evento es `'sent_for_validation_self'` para usar un template diferente.
+
+---
+
+#### Bloque 5 — Sistema de asignaciones
+
+Para resolver "¿quién es el validator asignado a este uploader?" y "¿quién es el approver asignado a este validator?", añadimos un sistema de asignaciones completo:
+
+**Tablas nuevas (migration):**
+- `uploader_validator_assignments`: `(uploader_id, validator_id)` — qué validator supervisa a qué uploader.
+- `validator_approver_assignments`: `(validator_id, approver_id)` — qué approver supervisa a qué validator.
+
+**`AssignmentRepository`** con 8 métodos:
+- `assignUploaderToValidator(uploaderId, validatorId)`
+- `assignValidatorToApprover(validatorId, approverId)`
+- `getAssignedValidatorForUploader(uploaderId)` → validatorId | null
+- `getAssignedApproverForValidator(validatorId)` → approverId | null
+- `getAssignedUploaderIds(validatorId)` → string[] (para `ListInvoicesUseCase`)
+- `getAssignedValidatorIds(approverId)` → string[] (para `ListInvoicesUseCase`)
+- `removeUploaderAssignment(uploaderId)`
+- `removeValidatorAssignment(validatorId)`
+
+**Endpoint de administración `POST /api/v1/admin/assignments`** (solo `admin`): permite crear asignaciones entre usuarios.
+
+---
+
+**Resumen de tests al cerrar FASE 11:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 24 | 140 |
+| Unit (controllers + guards + pipes + filters) | 5 | 50 |
+| Unit (OCR + LLM + queue + workers) | 5 | 22 |
+| Unit (handlers + templates + ResendAdapter) | 6 | 47 |
+| Integration (repositorios reales) | 4 | 36 |
+| **Total** | **44** | **295** |
+
+> El incremento en handlers se debe a que los 4 handlers (approved, rejected, sent_for_approval, sent_for_validation) ahora tienen lógica completa con 9-12 tests cada uno.
+
+**Variables de entorno nuevas en FASE 11:**
+
+```
+RESEND_API_KEY=       # API key de Resend (obligatoria para envío real)
+RESEND_FROM_EMAIL=    # Email remitente (ej: invoicescan@tu-dominio.com)
+```
+
+**Commit de cierre:**
+```
+feat(notifications): implement email notifications with Resend (FASE 11)
+```
+
+---
+
+### FASE 12 — Export CSV/JSON + paquete shared + ESLint frontend
+
+**¿Qué hicimos?**
+
+FASE 12 combina tres mejoras ortogonales pero relacionadas:
+1. **Export asíncrono de facturas** a CSV y JSON via BullMQ.
+2. **Paquete `shared`** como fuente de verdad de tipos y schemas Zod compartidos entre backend y frontend.
+3. **ESLint del frontend** con configuración de Next.js.
+
+---
+
+#### Bloque 1 — Export asíncrono de facturas
+
+El export de facturas puede implicar miles de filas. Hacerlo síncronamente en una petición HTTP causaría:
+- Timeout del cliente si tarda más de 30s.
+- Bloqueo del event loop de Node.js durante la serialización.
+- Memoria consumida por todos los datos a la vez.
+
+La solución: **export asíncrono via BullMQ**.
+
+**Flujo del export:**
+
+```
+1. POST /api/v1/invoices/export
+   → Controller encola job en BullMQ → devuelve { jobId } inmediato (202 Accepted)
+
+2. [Worker en segundo plano]
+   → Carga todas las facturas del usuario (respeta su rol)
+   → Serializa a CSV o JSON
+   → Escribe el archivo en exports/<jobId>.<ext>
+
+3. GET /api/v1/exports/:jobId/status
+   → Frontend hace polling cada 2s
+   → Cuando status = 'completed' → aparece botón de descarga con downloadUrl
+
+4. GET /api/v1/exports/:jobId/download
+   → Sirve el archivo con Content-Disposition: attachment
+```
+
+**`ExportInvoicesWorker`** — el worker BullMQ:
+
+```typescript
+// packages/backend/src/interface/jobs/export-invoices.worker.ts
+
+@Processor(EXPORT_INVOICE_QUEUE)
+export class ExportInvoicesWorker extends WorkerHost {
+  async process(job: Job<ExportJobData>): Promise<void> {
+    const { jobId, format, requesterId, requesterRole } = job.data;
+
+    // 1. Obtener TODAS las facturas (sin paginación) con scoping por rol
+    const invoices = await this.fetchInvoices(requesterId, requesterRole, filters);
+
+    // 2. Serializar
+    const content = format === 'csv' ? this.toCsv(invoices) : JSON.stringify(this.toJson(invoices), null, 2);
+
+    // 3. Escribir a disco
+    await writeFile(`exports/${jobId}.${format}`, content, 'utf8');
+  }
+}
+```
+
+El scoping por rol replica la lógica de `ListInvoicesUseCase`: uploaders ven solo sus facturas, validators ven las de sus uploaders asignados, approvers ven las de la jerarquía completa bajo ellos, admins ven todo.
+
+**CSV con RFC 4180**: el formato CSV sigue el estándar RFC 4180 — cada valor va entre comillas dobles, las comillas dentro de valores se escapan duplicándolas (`"` → `""`). Esto garantiza que valores con comas o saltos de línea no rompen el archivo.
+
+**Idempotencia**: escribir el mismo `jobId` dos veces sobreescribe el mismo archivo. Si el worker se reinicia, el resultado es idéntico.
+
+---
+
+#### Bloque 2 — Paquete `packages/shared`
+
+El paquete `shared` es la **fuente de verdad** para tipos y schemas Zod que el backend y el frontend necesitan conocer:
+
+```
+packages/shared/src/index.ts
+  → Schemas Zod de DTOs (InvoiceDto, UserDto, ProviderDto...)
+  → Tipos TypeScript inferidos de esos schemas
+  → Enums (InvoiceStatusEnum, UserRole)
+  → Constantes compartidas
+```
+
+**¿Por qué era necesario?**
+
+Sin `shared`, si añades un campo al DTO de `InvoiceDto` en el backend, tenías que actualizarlo manualmente también en el frontend. Con `shared`, el cambio se hace en un lugar y TypeScript detecta el error si el frontend no lo refleja.
+
+```typescript
+// packages/shared/src/index.ts
+import { z } from 'zod';
+
+export const InvoiceDtoSchema = z.object({
+  invoiceId: z.string().uuid(),
+  status: z.enum(['PENDING', 'PROCESSING', 'EXTRACTED', /* ... */]),
+  uploaderId: z.string().uuid(),
+  amount: z.number(),
+  // ...
+});
+
+export type InvoiceDto = z.infer<typeof InvoiceDtoSchema>;
+```
+
+```typescript
+// packages/backend — consume el schema para validar respuestas del controller
+import { InvoiceDtoSchema } from '@invoice-flow/shared';
+
+// packages/frontend — consume el tipo para tipar los hooks de TanStack Query
+import type { InvoiceDto } from '@invoice-flow/shared';
+const { data } = useQuery<InvoiceDto[]>({ queryKey: ['invoices'] });
+```
+
+**Configuración del workspace**:
+
+```json
+// packages/shared/package.json
+{
+  "name": "@invoice-flow/shared",
+  "version": "0.0.1",
+  "main": "./src/index.ts"
+}
+```
+
+```json
+// packages/backend/package.json
+{
+  "dependencies": {
+    "@invoice-flow/shared": "workspace:*"
+  }
+}
+```
+
+La referencia `workspace:*` le dice a pnpm que use el paquete local, no npmjs.com.
+
+---
+
+#### Bloque 3 — ESLint del frontend con Next.js
+
+El frontend usaba solo `typescript-eslint` por defecto, sin las reglas específicas de Next.js. Esto significaba que no se detectaban:
+- Imágenes `<img>` que deberían ser `<Image>` de Next.js.
+- Links `<a>` que deberían ser `<Link>` de Next.js.
+- Uso incorrecto de APIs de Next.js (por ejemplo, acceder a `params` sin `await` en App Router).
+
+Añadimos `eslint-config-next` con las reglas de `next/core-web-vitals`:
+
+```javascript
+// packages/frontend/eslint.config.mjs
+import nextPlugin from '@next/eslint-plugin-next';
+
+export default [
+  ...compat.extends('next/core-web-vitals'),
+  // + reglas typescript-eslint existentes
+];
+```
+
+Esto detecta y corrige problemas de rendimiento y correctness específicos de Next.js en tiempo de lint, antes de llegar a producción.
+
+---
+
+**Resumen al cerrar FASE 12:**
+
+| Mejora | Estado |
+|---|---|
+| Export CSV async (BullMQ + polling) | ✅ Completo |
+| Export JSON async | ✅ Completo |
+| Endpoint status + download | ✅ Completo |
+| Paquete `shared` con DTOs Zod | ✅ Completo |
+| Backend consume `shared` | ✅ Completo |
+| Frontend tipado con `shared` | ✅ Completo |
+| ESLint Next.js en frontend | ✅ Completo |
+
+**Commit de cierre:**
+```
+feat(export+shared): add async CSV/JSON export, shared package, frontend eslint (FASE 12)
+```
+
+---
+
+### FASE 13 — Observabilidad: OpenTelemetry + PinoLogger + Unit of Work atómico
+
+**¿Qué hicimos?**
+
+FASE 13 es la fase de **calidad de producción**: añade las herramientas que hacen que el sistema sea operable, debuggeable y confiable bajo carga. Tres piezas independientes pero complementarias:
+
+1. **Unit of Work atómico (T1)**: las operaciones críticas de aprobación y rechazo ocurren dentro de una única transacción PostgreSQL.
+2. **OpenTelemetry completo**: trazas, métricas y logs estructurados exportados a SigNoz.
+3. **Migración a PinoLogger**: todos los loggers del sistema usan Pino (el logger más rápido para Node.js) con serialización JSON.
+
+---
+
+#### Bloque 1 — Unit of Work atómico
+
+**El problema que resuelve:**
+
+Cuando se aprueba una factura, ocurren tres operaciones de base de datos:
+1. `invoiceRepo.save(invoice)` — cambia el estado a `APPROVED`.
+2. `invoiceEventRepo.save(event)` — registra la transición en el historial.
+3. `outboxRepo.save(outboxEvent)` — guarda el evento para la notificación.
+
+Si la aplicación se cae entre las operaciones 2 y 3, la factura queda aprobada pero nunca llega la notificación. Si se cae entre 1 y 2, el historial de transiciones queda incompleto.
+
+**La solución — Transacción PostgreSQL atómica:**
+
+```typescript
+// packages/backend/src/application/ports/unit-of-work.port.ts
+
+export interface UoWContext {
+  invoiceRepo: InvoiceRepository;
+  invoiceEventRepo: InvoiceEventRepository;
+  outboxRepo: OutboxEventRepository;
+}
+
+export interface UnitOfWorkPort {
+  execute<T>(fn: (ctx: UoWContext) => Promise<T>): Promise<T>;
+}
+```
+
+```typescript
+// packages/backend/src/infrastructure/db/unit-of-work.typeorm.ts
+
+@Injectable()
+export class TypeOrmUnitOfWork implements UnitOfWorkPort {
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly invoiceRepo: InvoiceTypeOrmRepository,
+    private readonly invoiceEventRepo: InvoiceEventTypeOrmRepository,
+    private readonly outboxRepo: OutboxEventTypeOrmRepository,
+  ) {}
+
+  async execute<T>(fn: (ctx: UoWContext) => Promise<T>): Promise<T> {
+    return this.dataSource.transaction(async (em: EntityManager) => {
+      // Los tres repos comparten el mismo EntityManager → misma transacción
+      const ctx: UoWContext = {
+        invoiceRepo:      this.invoiceRepo.forManager(em),
+        invoiceEventRepo: this.invoiceEventRepo.forManager(em),
+        outboxRepo:       this.outboxRepo.forManager(em),
+      };
+      return fn(ctx);
+    });
+  }
+}
+```
+
+**`forManager(em)`** — el patrón clave:
+
+Cada repositorio TypeORM tiene ahora un método `forManager(em: EntityManager)` que devuelve una nueva instancia del repositorio que usa ese `EntityManager` específico (y por tanto la misma conexión de base de datos y la misma transacción abierta):
+
+```typescript
+// packages/backend/src/infrastructure/db/repositories/invoice.typeorm-repository.ts
+
+forManager(em: EntityManager): InvoiceTypeOrmRepository {
+  return new InvoiceTypeOrmRepository(em.getRepository(InvoiceOrmEntity));
+}
+```
+
+**`ApproveInvoiceUseCase` con Unit of Work:**
+
+```typescript
+async execute(input: ApproveInvoiceInput) {
+  const invoice = await this.invoiceRepo.findById(input.invoiceId);
+  if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
+
+  const approveResult = invoice.approve(input.approverId);
+  if (approveResult.isErr()) return err(approveResult.error);
+
+  // Las tres operaciones ocurren en una sola transacción PostgreSQL
+  await this.unitOfWork.execute(async (ctx) => {
+    await ctx.invoiceRepo.save(invoice);
+
+    const invoiceEvent = InvoiceEvent.create({ ... });
+    await ctx.invoiceEventRepo.save(invoiceEvent.value);
+
+    await ctx.outboxRepo.save(
+      new InvoiceApprovedEvent({ invoiceId: invoice.getId(), approverId: input.approverId, status: 'APPROVED' })
+    );
+  });
+
+  // La auditoría está FUERA de la transacción: un fallo de auditoría
+  // no debe revertir la aprobación real de la factura
+  await this.auditor.record({ action: 'approve', resourceId: invoice.getId(), userId: input.approverId });
+
+  invoicesApprovedCounter.add(1, { approverId: input.approverId });
+
+  return ok({ invoiceId: invoice.getId(), status: 'APPROVED', approverId: input.approverId });
+}
+```
+
+**¿Por qué la auditoría queda fuera de la transacción?**
+
+La auditoría registra *que la aprobación ocurrió* — esto debe ser verdad incluso si el registro de auditoría falla. Si estuviese dentro de la transacción y el insert de auditoría fallase por algún motivo (tabla llena, red caída), la transacción se revertiría y la factura **no** quedaría aprobada. Eso sería incorrecto: la lógica de negocio ocurrió, solo falló el efecto secundario de registrarlo.
+
+**`eventBus` eliminado de approve/reject**: con el Unit of Work, el `outboxRepo.save()` ocurre directamente dentro de la transacción. Ya no se necesita el `EventBusPort` — la publicación del evento es parte de la misma operación atómica. Los constructores de `ApproveInvoiceUseCase` y `RejectInvoiceUseCase` ya no tienen `EventBusPort` como dependencia.
+
+---
+
+#### Bloque 2 — OpenTelemetry
+
+**¿Qué es OpenTelemetry?**
+
+OpenTelemetry (OTel) es el estándar de la industria para **observabilidad**. Define tres pilares:
+
+| Pilar | Qué responde | Herramienta en OTel |
+|---|---|---|
+| **Trazas** | ¿Qué pasó exactamente en esta petición y cuánto tardó cada paso? | `Span`, `Tracer` |
+| **Métricas** | ¿Cuántas facturas se aprobaron hoy? ¿Cuánto tarda el OCR? | `Counter`, `Histogram` |
+| **Logs** | ¿Qué mensajes emitió el sistema? | Logs estructurados correlacionados con trazas |
+
+**¿Por qué OTel en lugar de una librería específica (Datadog, New Relic...)?**
+
+OTel es **vendor-neutral**: el mismo código exporta datos a Jaeger, SigNoz, Datadog, o cualquier otro backend. Si cambias de proveedor de observabilidad, no cambias el código de instrumentación — solo cambias la URL del colector.
+
+**`tracing.ts` — Setup del SDK:**
+
+```typescript
+// packages/backend/src/tracing.ts
+// Este archivo se importa PRIMERO en main.ts — antes de cualquier otro import
+
+const endpoint = process.env['OTEL_EXPORTER_OTLP_ENDPOINT'];
+
+if (endpoint) {
+  const sdk = new NodeSDK({
+    resource: resourceFromAttributes({
+      [ATTR_SERVICE_NAME]: serviceName,  // 'invoice-flow-backend'
+    }),
+    traceExporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }),
+    metricReader: new PeriodicExportingMetricReader({
+      exporter: new OTLPMetricExporter({ url: `${endpoint}/v1/metrics` }),
+      exportIntervalMillis: 10_000,  // cada 10 segundos
+    }),
+    instrumentations: [
+      getNodeAutoInstrumentations({
+        '@opentelemetry/instrumentation-fs': { enabled: false }, // demasiado verboso
+      }),
+    ],
+  });
+  sdk.start();
+}
+// Si no hay OTEL_EXPORTER_OTLP_ENDPOINT → no-op automático (API OTel devuelve spans vacíos)
+```
+
+**No-op mode**: cuando `OTEL_EXPORTER_OTLP_ENDPOINT` no está configurado, el SDK no se inicializa. La API de OTel (`trace.getTracer(...)`) devuelve automáticamente un "no-op tracer" que ignora todas las operaciones sin errores. La aplicación funciona igual con o sin colector configurado.
+
+**Variables de entorno para OTel:**
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318  # SigNoz o Jaeger
+OTEL_SERVICE_NAME=invoice-flow-backend              # nombre del servicio en el UI
+```
+
+**Métricas implementadas** en `src/shared/metrics/metrics.ts`:
+
+| Métrica | Tipo | Atributos | Dónde se incrementa |
+|---|---|---|---|
+| `invoices_approved_total` | Counter | `approverId` | `ApproveInvoiceUseCase` |
+| `invoices_rejected_total` | Counter | `approverId` | `RejectInvoiceUseCase` |
+| `invoices_processed_total` | Counter | `status: 'success'\|'error'` | `ProcessInvoiceUseCase` |
+| `outbox_events_processed_total` | Counter | `eventType` | `OutboxPollerWorker` |
+| `ocr_duration_ms` | Histogram | `invoiceId` | `ProcessInvoiceUseCase` |
+
+**Trazas en `ProcessInvoiceUseCase`:**
+
+```typescript
+const tracer = trace.getTracer('invoice-flow-backend');
+return tracer.startActiveSpan('ProcessInvoiceUseCase.execute', async (span) => {
+  span.setAttribute('invoice.id', input.invoiceId);
+  const startMs = Date.now();
+  try {
+    return await this._execute(input);
+  } catch (e) {
+    span.setStatus({ code: SpanStatusCode.ERROR });
+    throw e;
+  } finally {
+    ocrDurationHistogram.record(Date.now() - startMs, { invoiceId: input.invoiceId });
+    span.end();
+  }
+});
+```
+
+Con estas trazas, en SigNoz puedes ver exactamente cuánto tarda el OCR + LLM para cada factura concreta, y correlacionar latencias altas con facturas específicas.
+
+---
+
+#### Bloque 3 — PinoLogger: el logger de producción
+
+**¿Por qué Pino?**
+
+`new Logger('ContextName')` de NestJS (que usa internamente `console.log`) tiene varios problemas en producción:
+- Los logs son texto plano — difíciles de buscar y analizar con herramientas como Elasticsearch.
+- No hay correlación con trazas de OTel (sin `traceId` en el log).
+- Es notablemente más lento que Pino.
+
+**Pino** es el logger más rápido para Node.js (serializa a JSON usando código C nativo). `nestjs-pino` integra Pino con NestJS:
+
+```typescript
+// packages/backend/src/app.module.ts
+
+LoggerModule.forRoot({
+  pinoHttp: {
+    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+    transport: process.env.NODE_ENV === 'production'
+      ? undefined                     // JSON puro en producción (para Elasticsearch)
+      : { target: 'pino-pretty' },    // formato bonito en desarrollo
+    mixin() {
+      // Añade el traceId de OTel a cada log automáticamente
+      const span = trace.getActiveSpan();
+      if (!span) return {};
+      const { traceId, spanId } = span.spanContext();
+      return { traceId, spanId };
+    },
+  },
+}),
+```
+
+El `mixin` que añade `traceId` es crucial: permite correlacionar un log con la traza OTel que lo generó. En SigNoz puedes ver un log y en un click ir a la traza completa de esa petición.
+
+**Patrón de migración — de `new Logger()` a `@InjectPinoLogger`:**
+
+```typescript
+// ❌ Antes (NestJS Logger)
+@Injectable()
+export class InvoiceApprovedHandler {
+  private readonly logger = new Logger(InvoiceApprovedHandler.name);
+  // logger.log('message', { ctx }) — objeto como segundo parámetro
+
+// ✅ Después (PinoLogger)
+@Injectable()
+export class InvoiceApprovedHandler {
+  constructor(
+    @InjectPinoLogger(InvoiceApprovedHandler.name)
+    private readonly logger: PinoLogger,
+    // ...resto de dependencias
+  ) {}
+  // logger.info({ ctx }, 'message') — objeto PRIMERO, mensaje DESPUÉS (estándar Pino)
+```
+
+**Diferencia clave en la firma de los métodos de log:**
+
+```typescript
+// NestJS Logger (contexto como segundo argumento)
+this.logger.log('Invoice approved', { invoiceId, approverId });
+
+// PinoLogger (objeto de contexto PRIMERO, mensaje DESPUÉS — estándar Pino)
+this.logger.info({ invoiceId, approverId }, 'Invoice approved');
+```
+
+Esta diferencia es importante: Pino serializa eficientemente todos los campos del objeto como propiedades del JSON del log, lo que facilita la búsqueda por `invoiceId` en herramientas de análisis.
+
+**Casos especiales — mantienen `new Logger()`:**
+
+| Clase | Razón |
+|---|---|
+| `DomainErrorFilter` | Instanciada con `new DomainErrorFilter()` en `main.ts` — sin DI de NestJS |
+| `LocalStorageAdapter` | Instanciada con `new LocalStorageAdapter(uploadsDir)` en `storage.module.ts` |
+| `OutboxEventBusAdapter` | Instanciada con `useFactory` en `invoices.module.ts` |
+| `ResendAdapter` | Instanciada con `new ResendAdapter(apiKey, from)` en `notification.module.ts` |
+
+Estas clases no están gestionadas por el contenedor de DI de NestJS, por lo que `@InjectPinoLogger` (que requiere DI) no puede usarse en ellas.
+
+---
+
+#### Bloque 4 — SigNoz en Docker Compose
+
+SigNoz es el backend de observabilidad open-source que recibe y visualiza los datos de OTel. Se añade a `docker-compose.yml` con un perfil separado para no levantarlo automáticamente:
+
+```bash
+# Solo levantar observabilidad cuando se necesita
+docker compose --profile observability up -d signoz
+```
+
+SigNoz expone:
+- `http://localhost:4318` — endpoint OTLP/HTTP (para configurar en `OTEL_EXPORTER_OTLP_ENDPOINT`)
+- `http://localhost:3301` — UI web de SigNoz (trazas, métricas, logs)
+
+---
+
+**Resumen de tests al cerrar FASE 13:**
+
+| Categoría | Archivos | Tests |
+|---|---|---|
+| Unit (domain + use cases) | 24 | 140 |
+| Unit (controllers + guards + pipes + filters) | 5 | 50 |
+| Unit (OCR + LLM + queue + workers) | 5 | 22 |
+| Unit (handlers + templates + ResendAdapter) | 6 | 47 |
+| Unit (UoW specs actualizados) | 2 | 12 |
+| Integration (repositorios reales) | 4 | 36 |
+| **Total** | **44** | **344** |
+
+**Variables de entorno nuevas en FASE 13:**
+
+```
+OTEL_EXPORTER_OTLP_ENDPOINT=   # URL del colector OTLP (ej: http://localhost:4318)
+OTEL_SERVICE_NAME=              # Nombre del servicio en SigNoz (default: invoice-flow-backend)
+```
+
+**Commit de cierre:**
+```
+feat(fase13): UoW atomic TX + OpenTelemetry + PinoLogger migration
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*

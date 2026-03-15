@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InvoiceSentForValidationEvent } from '../../../domain/events/invoice-sent-for-validation.event';
 import type { NotificationPort } from '../../../application/ports/notification.port';
@@ -24,9 +25,9 @@ import { INVOICE_NOTE_REPOSITORY } from '../../../domain/repositories/invoice-no
  */
 @Injectable()
 export class InvoiceSentForValidationHandler {
-  private readonly logger = new Logger(InvoiceSentForValidationHandler.name);
-
   constructor(
+    @InjectPinoLogger(InvoiceSentForValidationHandler.name)
+    private readonly logger: PinoLogger,
     @Inject(NOTIFICATION_TOKEN)
     private readonly notifier: NotificationPort,
     @Inject('InvoiceRepository')
@@ -43,15 +44,15 @@ export class InvoiceSentForValidationHandler {
   async handle(event: InvoiceSentForValidationEvent): Promise<void> {
     const { invoiceId, sentById } = event.payload;
 
-    this.logger.log('invoice.sent_for_validation received', {
-      invoiceId,
-      sentById,
-    });
+    this.logger.info(
+      { invoiceId, sentById },
+      'invoice.sent_for_validation received',
+    );
 
     // Load invoice to get uploaderId and extracted data
     const invoice = await this.invoiceRepo.findById(invoiceId);
     if (!invoice) {
-      this.logger.warn('Invoice not found for notification', { invoiceId });
+      this.logger.warn({ invoiceId }, 'Invoice not found for notification');
       return;
     }
 
@@ -61,10 +62,10 @@ export class InvoiceSentForValidationHandler {
     // Load actor (who clicked "Send to Validation")
     const actor = await this.userRepo.findById(sentById);
     if (!actor) {
-      this.logger.warn('Actor user not found for notification', {
-        invoiceId,
-        sentById,
-      });
+      this.logger.warn(
+        { invoiceId, sentById },
+        'Actor user not found for notification',
+      );
       return;
     }
 
@@ -94,19 +95,15 @@ export class InvoiceSentForValidationHandler {
 
     if (!recipientId) {
       this.logger.warn(
+        { invoiceId, uploaderId, isSelfUpload },
         'No recipient found for sent_for_validation notification — skipping',
-        {
-          invoiceId,
-          uploaderId,
-          isSelfUpload,
-        },
       );
       return;
     }
 
     const recipient = await this.userRepo.findById(recipientId);
     if (!recipient) {
-      this.logger.warn('Recipient user not found', { invoiceId, recipientId });
+      this.logger.warn({ invoiceId, recipientId }, 'Recipient user not found');
       return;
     }
 

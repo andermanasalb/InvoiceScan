@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { AuditPort, AuditEntryInput } from '../../application/ports/audit.port';
 
 export const AUDIT_TOKEN = 'AUDIT_TOKEN';
@@ -21,10 +22,13 @@ export const AUDIT_TOKEN = 'AUDIT_TOKEN';
  */
 @Injectable()
 export class NoOpAuditAdapter implements AuditPort {
-  private readonly logger = new Logger(NoOpAuditAdapter.name);
+  constructor(
+    @InjectPinoLogger(NoOpAuditAdapter.name)
+    private readonly logger: PinoLogger,
+  ) {}
 
   record(entry: AuditEntryInput): Promise<void> {
-    this.logger.log('Audit event (no-op)', entry);
+    this.logger.info({ entry }, 'Audit event (no-op)');
     return Promise.resolve();
   }
 }

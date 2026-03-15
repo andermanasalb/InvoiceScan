@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InvoiceSentForApprovalEvent } from '../../../domain/events/invoice-sent-for-approval.event';
 import type { NotificationPort } from '../../../application/ports/notification.port';
@@ -23,9 +24,9 @@ import { INVOICE_NOTE_REPOSITORY } from '../../../domain/repositories/invoice-no
  */
 @Injectable()
 export class InvoiceSentForApprovalHandler {
-  private readonly logger = new Logger(InvoiceSentForApprovalHandler.name);
-
   constructor(
+    @InjectPinoLogger(InvoiceSentForApprovalHandler.name)
+    private readonly logger: PinoLogger,
     @Inject(NOTIFICATION_TOKEN)
     private readonly notifier: NotificationPort,
     @Inject('InvoiceRepository')
@@ -42,15 +43,15 @@ export class InvoiceSentForApprovalHandler {
   async handle(event: InvoiceSentForApprovalEvent): Promise<void> {
     const { invoiceId, sentById } = event.payload;
 
-    this.logger.log('invoice.sent_for_approval received', {
-      invoiceId,
-      sentById,
-    });
+    this.logger.info(
+      { invoiceId, sentById },
+      'invoice.sent_for_approval received',
+    );
 
     // Load invoice to get validatorId and extracted data
     const invoice = await this.invoiceRepo.findById(invoiceId);
     if (!invoice) {
-      this.logger.warn('Invoice not found for notification', { invoiceId });
+      this.logger.warn({ invoiceId }, 'Invoice not found for notification');
       return;
     }
 
@@ -58,9 +59,10 @@ export class InvoiceSentForApprovalHandler {
     const extractedData = invoice.getExtractedData();
 
     if (!validatorId) {
-      this.logger.warn('Invoice has no validatorId — cannot resolve approver', {
-        invoiceId,
-      });
+      this.logger.warn(
+        { invoiceId },
+        'Invoice has no validatorId — cannot resolve approver',
+      );
       return;
     }
 
@@ -69,18 +71,15 @@ export class InvoiceSentForApprovalHandler {
       await this.assignmentRepo.getAssignedApproverForValidator(validatorId);
     if (!approverId) {
       this.logger.warn(
+        { invoiceId, validatorId },
         'No approver assigned for validator — skipping notification',
-        {
-          invoiceId,
-          validatorId,
-        },
       );
       return;
     }
 
     const approver = await this.userRepo.findById(approverId);
     if (!approver) {
-      this.logger.warn('Approver user not found', { invoiceId, approverId });
+      this.logger.warn({ invoiceId, approverId }, 'Approver user not found');
       return;
     }
 

@@ -28,6 +28,28 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Observability (SigNoz) ─────────────────────────────────────────────
+  # Run only with: docker compose --profile observability up
+  # UI available at: http://localhost:3301
+  # OTLP HTTP endpoint: http://localhost:4318
+  #
+  # Set in .env:
+  #   OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+  #   OTEL_SERVICE_NAME=invoice-flow-backend
+  signoz:
+    profiles: [observability]
+    image: signoz/signoz:latest
+    container_name: signoz
+    ports:
+      - "3301:3301"   # SigNoz UI
+      - "4317:4317"   # OTLP gRPC
+      - "4318:4318"   # OTLP HTTP
+    environment:
+      - STORAGE=clickhouse
+    volumes:
+      - signozdata:/var/lib/signoz
+
 volumes:
   pgdata:
   redisdata:
+  signozdata:

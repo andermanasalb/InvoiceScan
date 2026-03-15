@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { DataSource } from 'typeorm';
+import { getDataSourceToken } from '@nestjs/typeorm';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { StorageModule } from './infrastructure/storage/storage.module';
 import { QueueModule } from './infrastructure/queue/queue.module';
@@ -14,6 +16,11 @@ import { EVENT_BUS_TOKEN } from './application/ports/event-bus.port';
 import { OUTBOX_EVENT_REPOSITORY } from './domain/repositories/outbox-event.repository';
 import { INVOICE_EVENT_REPOSITORY } from './domain/repositories/invoice-event.repository';
 import { INVOICE_NOTE_REPOSITORY } from './domain/repositories/invoice-note.repository';
+import { UNIT_OF_WORK_TOKEN } from './application/ports/unit-of-work.port';
+import { TypeOrmUnitOfWork } from './infrastructure/db/unit-of-work.typeorm';
+import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoice.typeorm-repository';
+import { OutboxEventTypeOrmRepository } from './infrastructure/db/repositories/outbox-event.typeorm-repository';
+import { InvoiceEventTypeOrmRepository } from './infrastructure/db/repositories/invoice-event.typeorm-repository';
 import { UploadInvoiceUseCase } from './application/use-cases/upload-invoice.use-case';
 import { ListInvoicesUseCase } from './application/use-cases/list-invoices.use-case';
 import { GetInvoiceUseCase } from './application/use-cases/get-invoice.use-case';
@@ -52,6 +59,7 @@ import type { AuditEventRepository } from './domain/repositories/audit-event.rep
 import type { StoragePort } from './application/ports/storage.port';
 import type { AuditPort } from './application/ports/audit.port';
 import type { EventBusPort } from './application/ports/event-bus.port';
+import type { UnitOfWorkPort } from './application/ports/unit-of-work.port';
 import type { InvoiceQueuePort } from './application/ports/invoice-queue.port';
 import type { UserRepository } from './domain/repositories';
 import type { AssignmentRepository } from './domain/repositories/assignment.repository';
@@ -68,8 +76,8 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
  *     ├── UploadInvoiceUseCase      → InvoiceRepository, StoragePort, AuditPort, InvoiceQueuePort
  *     ├── ListInvoicesUseCase       → InvoiceRepository
  *     ├── GetInvoiceUseCase         → InvoiceRepository
- *     ├── ApproveInvoiceUseCase     → InvoiceRepository, AuditPort, EventBusPort
- *     ├── RejectInvoiceUseCase      → InvoiceRepository, AuditPort, EventBusPort
+ *     ├── ApproveInvoiceUseCase     → InvoiceRepository, AuditPort, EventBusPort, UnitOfWorkPort
+ *     ├── RejectInvoiceUseCase      → InvoiceRepository, AuditPort, EventBusPort, UnitOfWorkPort
  *     ├── GetInvoiceEventsUseCase   → InvoiceRepository, InvoiceEventRepository
  *     ├── SendToApprovalUseCase     → InvoiceRepository, AuditPort
  *     ├── RetryInvoiceUseCase       → InvoiceRepository, AuditPort, InvoiceQueuePort
@@ -79,6 +87,7 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
  *
  * AuditPort    → AuditEventTypeOrmRepository (real TypeORM impl, FASE 9)
  * EventBusPort → OutboxEventBusAdapter (saves to outbox_events, FASE 9)
+ * UoW          → TypeOrmUnitOfWork (wraps invoice+invoiceEvent+outbox in one TX, FASE 13)
  *
  * The OutboxPollerWorker (in JobsModule) drains outbox_events every 10s
  * and emits events in-process via EventEmitter2.
@@ -105,6 +114,29 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
       useFactory: (auditRepo: AuditEventRepository): AuditPort =>
         new AuditAdapter(auditRepo),
       inject: ['AuditEventRepository'],
+    },
+
+    // UnitOfWork → TypeORM atomic transaction wrapping invoice+invoiceEvent+outbox
+    {
+      provide: UNIT_OF_WORK_TOKEN,
+      useFactory: (
+        dataSource: DataSource,
+        invoiceRepo: InvoiceTypeOrmRepository,
+        invoiceEventRepo: InvoiceEventTypeOrmRepository,
+        outboxRepo: OutboxEventTypeOrmRepository,
+      ): UnitOfWorkPort =>
+        new TypeOrmUnitOfWork(
+          dataSource,
+          invoiceRepo,
+          invoiceEventRepo,
+          outboxRepo,
+        ),
+      inject: [
+        getDataSourceToken(),
+        'InvoiceRepository',
+        INVOICE_EVENT_REPOSITORY,
+        OUTBOX_EVENT_REPOSITORY,
+      ],
     },
 
     // ──────────────────────────────────────────────────────────────
@@ -153,21 +185,9 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
       useFactory: (
         invoiceRepo: InvoiceRepository,
         auditor: AuditPort,
-        eventBus: EventBusPort,
-        invoiceEventRepo: InvoiceEventRepository,
-      ) =>
-        new ApproveInvoiceUseCase(
-          invoiceRepo,
-          auditor,
-          eventBus,
-          invoiceEventRepo,
-        ),
-      inject: [
-        'InvoiceRepository',
-        AUDIT_PORT_TOKEN,
-        EVENT_BUS_TOKEN,
-        INVOICE_EVENT_REPOSITORY,
-      ],
+        uow: UnitOfWorkPort,
+      ) => new ApproveInvoiceUseCase(invoiceRepo, auditor, uow),
+      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, UNIT_OF_WORK_TOKEN],
     },
 
     {
@@ -175,21 +195,9 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
       useFactory: (
         invoiceRepo: InvoiceRepository,
         auditor: AuditPort,
-        eventBus: EventBusPort,
-        invoiceEventRepo: InvoiceEventRepository,
-      ) =>
-        new RejectInvoiceUseCase(
-          invoiceRepo,
-          auditor,
-          eventBus,
-          invoiceEventRepo,
-        ),
-      inject: [
-        'InvoiceRepository',
-        AUDIT_PORT_TOKEN,
-        EVENT_BUS_TOKEN,
-        INVOICE_EVENT_REPOSITORY,
-      ],
+        uow: UnitOfWorkPort,
+      ) => new RejectInvoiceUseCase(invoiceRepo, auditor, uow),
+      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, UNIT_OF_WORK_TOKEN],
     },
 
     {

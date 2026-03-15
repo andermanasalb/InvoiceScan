@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { PinoLogger } from 'nestjs-pino';
 import { InvoiceRejectedHandler } from '../invoice-rejected.handler';
 import { InvoiceRejectedEvent } from '../../../../domain/events/invoice-rejected.event';
 import type { NotificationPort } from '../../../../application/ports/notification.port';
@@ -76,6 +77,13 @@ describe('InvoiceRejectedHandler', () => {
   });
 
   beforeEach(() => {
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as PinoLogger;
+
     mockNotifier = { notifyStatusChange: vi.fn().mockResolvedValue(undefined) };
 
     mockInvoiceRepo = {
@@ -88,6 +96,7 @@ describe('InvoiceRejectedHandler', () => {
       countByStatusForUploader: vi.fn(),
       findByUploaderIds: vi.fn(),
       countByStatusForUploaderIds: vi.fn(),
+      findUploaderEmail: vi.fn(),
     };
 
     mockUserRepo = {
@@ -109,6 +118,7 @@ describe('InvoiceRejectedHandler', () => {
     };
 
     handler = new InvoiceRejectedHandler(
+      mockLogger,
       mockNotifier,
       mockInvoiceRepo,
       mockUserRepo,

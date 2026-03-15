@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { InvoiceEvent } from '../../../domain/entities';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 import type { InvoiceEventRepository } from '../../../domain/repositories/invoice-event.repository';
@@ -15,6 +15,16 @@ export class InvoiceEventTypeOrmRepository implements InvoiceEventRepository {
     @InjectRepository(InvoiceEventOrmEntity)
     private readonly repo: Repository<InvoiceEventOrmEntity>,
   ) {}
+
+  /**
+   * Returns a new instance scoped to the provided EntityManager.
+   * Used by TypeOrmUnitOfWork to share a single database transaction.
+   */
+  forManager(em: EntityManager): InvoiceEventTypeOrmRepository {
+    return new InvoiceEventTypeOrmRepository(
+      em.getRepository(InvoiceEventOrmEntity),
+    );
+  }
 
   async findByInvoiceId(invoiceId: string): Promise<InvoiceEvent[]> {
     const orms = await this.repo.find({

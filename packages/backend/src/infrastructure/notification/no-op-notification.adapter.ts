@@ -1,4 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import {
   NotificationPort,
   InvoiceNotificationPayload,
@@ -14,14 +15,20 @@ import {
  */
 @Injectable()
 export class NoOpNotificationAdapter implements NotificationPort {
-  private readonly logger = new Logger(NoOpNotificationAdapter.name);
+  constructor(
+    @InjectPinoLogger(NoOpNotificationAdapter.name)
+    private readonly logger: PinoLogger,
+  ) {}
 
   notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void> {
-    this.logger.log('Notification (no-op)', {
-      invoiceId: payload.invoiceId,
-      eventType: payload.eventType,
-      toEmails: payload.toEmails,
-    });
+    this.logger.info(
+      {
+        invoiceId: payload.invoiceId,
+        eventType: payload.eventType,
+        toEmails: payload.toEmails,
+      },
+      'Notification (no-op)',
+    );
     return Promise.resolve();
   }
 }

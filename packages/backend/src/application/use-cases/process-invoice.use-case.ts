@@ -1,5 +1,6 @@
 import { ok, err, Result } from 'neverthrow';
 import { randomUUID } from 'crypto';
+import { trace, SpanStatusCode } from '@opentelemetry/api';
 import { InvoiceRepository } from '../../domain/repositories';
 import { InvoiceEventRepository } from '../../domain/repositories/invoice-event.repository';
 import { InvoiceEvent } from '../../domain/entities/invoice-event.entity';
@@ -8,6 +9,10 @@ import { StoragePort, AuditPort, OcrPort, LLMPort } from '../ports';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvoiceNotFoundError } from '../../domain/errors';
 import { ExtractedData } from '../../domain/entities/invoice.entity';
+import {
+  invoicesProcessedCounter,
+  ocrDurationHistogram,
+} from '../../shared/metrics/metrics';
 
 export interface ProcessInvoiceInput {
   invoiceId: string;
@@ -52,6 +57,31 @@ export class ProcessInvoiceUseCase {
   async execute(
     input: ProcessInvoiceInput,
   ): Promise<Result<ProcessInvoiceOutput, DomainError>> {
+    const tracer = trace.getTracer('invoice-flow-backend');
+    return tracer.startActiveSpan(
+      'ProcessInvoiceUseCase.execute',
+      async (span) => {
+        span.setAttribute('invoice.id', input.invoiceId);
+        const startMs = Date.now();
+
+        try {
+          return await this._execute(input);
+        } catch (e) {
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw e;
+        } finally {
+          ocrDurationHistogram.record(Date.now() - startMs, {
+            invoiceId: input.invoiceId,
+          });
+          span.end();
+        }
+      },
+    );
+  }
+
+  private async _execute(
+    input: ProcessInvoiceInput,
+  ): Promise<Result<ProcessInvoiceOutput, DomainError>> {
     // 1. Cargar la factura
     const invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
@@ -94,6 +124,7 @@ export class ProcessInvoiceUseCase {
         resourceId: invoice.getId(),
         userId: uploaderId,
       });
+      invoicesProcessedCounter.add(1, { status: 'error' });
       return ok({
         invoiceId: invoice.getId(),
         status: invoice.getStatus().getValue(),
@@ -121,6 +152,7 @@ export class ProcessInvoiceUseCase {
         resourceId: invoice.getId(),
         userId: uploaderId,
       });
+      invoicesProcessedCounter.add(1, { status: 'error' });
       return ok({
         invoiceId: invoice.getId(),
         status: invoice.getStatus().getValue(),
@@ -153,6 +185,8 @@ export class ProcessInvoiceUseCase {
       resourceId: invoice.getId(),
       userId: uploaderId,
     });
+
+    invoicesProcessedCounter.add(1, { status: 'success' });
 
     return ok({
       invoiceId: invoice.getId(),

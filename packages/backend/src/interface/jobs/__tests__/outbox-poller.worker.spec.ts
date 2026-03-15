@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { PinoLogger } from 'nestjs-pino';
 import { OutboxPollerWorker } from '../outbox-poller.worker';
 import type {
   OutboxEventRepository,
@@ -33,6 +34,13 @@ describe('OutboxPollerWorker', () => {
   beforeEach(() => {
     vi.useFakeTimers();
 
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as PinoLogger;
+
     mockOutboxRepo = {
       save: vi.fn(),
       findUnprocessed: vi.fn().mockResolvedValue([]),
@@ -43,7 +51,11 @@ describe('OutboxPollerWorker', () => {
       emitAsync: vi.fn().mockResolvedValue(undefined),
     };
 
-    worker = new OutboxPollerWorker(mockOutboxRepo, mockEventEmitter as never);
+    worker = new OutboxPollerWorker(
+      mockLogger,
+      mockOutboxRepo,
+      mockEventEmitter as never,
+    );
   });
 
   afterEach(() => {

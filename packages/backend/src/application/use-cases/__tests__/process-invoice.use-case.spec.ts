@@ -43,6 +43,7 @@ describe('ProcessInvoiceUseCase', () => {
       countByStatusForUploader: vi.fn(),
       findByUploaderIds: vi.fn(),
       countByStatusForUploaderIds: vi.fn(),
+      findUploaderEmail: vi.fn(),
     };
 
     mockStorage = {

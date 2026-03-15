@@ -1,3 +1,6 @@
+// OTel SDK MUST be the first import — patches modules at load time.
+// No-op when OTEL_EXPORTER_OTLP_ENDPOINT is not set.
+import './tracing';
 import { NestFactory } from '@nestjs/core';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';

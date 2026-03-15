@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { RejectInvoiceUseCase } from '../reject-invoice.use-case';
 import { InvoiceRepository } from '../../../domain/repositories';
 import { AuditPort } from '../../ports';
-import { EventBusPort } from '../../ports/event-bus.port';
+import { UnitOfWorkPort, UoWContext } from '../../ports/unit-of-work.port';
 import {
   createInvoice,
   createExtractedData,
@@ -25,10 +25,46 @@ const makeReadyInvoice = () => {
   return invoice;
 };
 
+/**
+ * Creates a mock UnitOfWorkPort that executes the callback directly
+ * (no real transaction — unit test boundary).
+ */
+const makeMockUow = (ctx: Partial<UoWContext> = {}): UnitOfWorkPort => ({
+  execute: vi.fn(async (fn) => {
+    const fullCtx: UoWContext = {
+      invoiceRepo: {
+        findById: vi.fn(),
+        findAll: vi.fn(),
+        findByUploaderId: vi.fn(),
+        findByUploaderIds: vi.fn(),
+        save: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn(),
+        countByStatus: vi.fn(),
+        countByStatusForUploader: vi.fn(),
+        countByStatusForUploaderIds: vi.fn(),
+        findUploaderEmail: vi.fn(),
+        ...ctx.invoiceRepo,
+      },
+      invoiceEventRepo: {
+        findByInvoiceId: vi.fn(),
+        save: vi.fn().mockResolvedValue(undefined),
+        ...ctx.invoiceEventRepo,
+      },
+      outboxRepo: {
+        save: vi.fn().mockResolvedValue(undefined),
+        findUnprocessed: vi.fn(),
+        markProcessed: vi.fn(),
+        ...ctx.outboxRepo,
+      },
+    };
+    return fn(fullCtx);
+  }),
+});
+
 describe('RejectInvoiceUseCase', () => {
   let mockRepo: InvoiceRepository;
   let mockAudit: AuditPort;
-  let mockEventBus: EventBusPort;
+  let mockUow: UnitOfWorkPort;
   let useCase: RejectInvoiceUseCase;
 
   beforeEach(() => {
@@ -42,12 +78,13 @@ describe('RejectInvoiceUseCase', () => {
       countByStatusForUploader: vi.fn(),
       findByUploaderIds: vi.fn(),
       countByStatusForUploaderIds: vi.fn(),
+      findUploaderEmail: vi.fn(),
     };
 
     mockAudit = { record: vi.fn().mockResolvedValue(undefined) };
-    mockEventBus = { publish: vi.fn().mockResolvedValue(undefined) };
+    mockUow = makeMockUow();
 
-    useCase = new RejectInvoiceUseCase(mockRepo, mockAudit, mockEventBus);
+    useCase = new RejectInvoiceUseCase(mockRepo, mockAudit, mockUow);
   });
 
   describe('execute', () => {
@@ -63,7 +100,7 @@ describe('RejectInvoiceUseCase', () => {
       expect(result._unsafeUnwrap().status).toBe(InvoiceStatusEnum.REJECTED);
     });
 
-    it('should persist the invoice after rejection', async () => {
+    it('should persist the invoice atomically via UoW', async () => {
       await useCase.execute({
         invoiceId: INVOICE_ID,
         approverId: APPROVER_ID,
@@ -71,7 +108,7 @@ describe('RejectInvoiceUseCase', () => {
         reason: 'Invalid',
       });
 
-      expect(mockRepo.save).toHaveBeenCalledOnce();
+      expect(mockUow.execute).toHaveBeenCalledOnce();
     });
 
     it('should record an audit event with action reject', async () => {
@@ -87,8 +124,41 @@ describe('RejectInvoiceUseCase', () => {
       );
     });
 
-    it('should publish an InvoiceRejectedEvent with correct payload', async () => {
+    it('should save InvoiceRejectedEvent inside the UoW via outboxRepo', async () => {
+      let capturedOutboxSave: ReturnType<typeof vi.fn> | undefined;
       const reason = 'Amount does not match PO';
+
+      mockUow = {
+        execute: vi.fn(async (fn) => {
+          const ctx: UoWContext = {
+            invoiceRepo: {
+              findById: vi.fn(),
+              findAll: vi.fn(),
+              findByUploaderId: vi.fn(),
+              findByUploaderIds: vi.fn(),
+              save: vi.fn().mockResolvedValue(undefined),
+              delete: vi.fn(),
+              countByStatus: vi.fn(),
+              countByStatusForUploader: vi.fn(),
+              countByStatusForUploaderIds: vi.fn(),
+              findUploaderEmail: vi.fn(),
+            },
+            invoiceEventRepo: {
+              findByInvoiceId: vi.fn(),
+              save: vi.fn().mockResolvedValue(undefined),
+            },
+            outboxRepo: {
+              save: (capturedOutboxSave = vi.fn().mockResolvedValue(undefined)),
+              findUnprocessed: vi.fn(),
+              markProcessed: vi.fn(),
+            },
+          };
+          return fn(ctx);
+        }),
+      };
+
+      useCase = new RejectInvoiceUseCase(mockRepo, mockAudit, mockUow);
+
       await useCase.execute({
         invoiceId: INVOICE_ID,
         approverId: APPROVER_ID,
@@ -96,15 +166,15 @@ describe('RejectInvoiceUseCase', () => {
         reason,
       });
 
-      expect(mockEventBus.publish).toHaveBeenCalledOnce();
-      const publishedEvent = (mockEventBus.publish as ReturnType<typeof vi.fn>)
-        .mock.calls[0][0];
-      expect(publishedEvent).toBeInstanceOf(InvoiceRejectedEvent);
-      expect(publishedEvent.eventType).toBe('invoice.rejected');
-      expect(publishedEvent.payload.invoiceId).toBe(INVOICE_ID);
-      expect(publishedEvent.payload.approverId).toBe(APPROVER_ID);
-      expect(publishedEvent.payload.reason).toBe(reason);
-      expect(publishedEvent.payload.status).toBe(InvoiceStatusEnum.REJECTED);
+      expect(capturedOutboxSave).toHaveBeenCalledOnce();
+      const savedEvent = (capturedOutboxSave as ReturnType<typeof vi.fn>).mock
+        .calls[0][0];
+      expect(savedEvent).toBeInstanceOf(InvoiceRejectedEvent);
+      expect(savedEvent.eventType).toBe('invoice.rejected');
+      expect(savedEvent.payload.invoiceId).toBe(INVOICE_ID);
+      expect(savedEvent.payload.approverId).toBe(APPROVER_ID);
+      expect(savedEvent.payload.reason).toBe(reason);
+      expect(savedEvent.payload.status).toBe(InvoiceStatusEnum.REJECTED);
     });
 
     it('should return err when invoice is not found', async () => {
@@ -136,7 +206,7 @@ describe('RejectInvoiceUseCase', () => {
       expect(result._unsafeUnwrapErr().code).toBe('INVALID_STATE_TRANSITION');
     });
 
-    it('should not publish event when invoice is not found', async () => {
+    it('should not call UoW when invoice is not found', async () => {
       mockRepo.findById = vi.fn().mockResolvedValue(null);
 
       await useCase.execute({
@@ -146,7 +216,7 @@ describe('RejectInvoiceUseCase', () => {
         reason: 'Invalid',
       });
 
-      expect(mockEventBus.publish).not.toHaveBeenCalled();
+      expect(mockUow.execute).not.toHaveBeenCalled();
     });
   });
 });

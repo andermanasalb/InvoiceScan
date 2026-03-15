@@ -44,4 +44,6 @@ export interface InvoiceRepository {
   ): Promise<Record<string, number>>;
   save(invoice: Invoice): Promise<void>;
   delete(id: string): Promise<void>;
+  /** Returns the email address of the uploader, or null if not found. */
+  findUploaderEmail(uploaderId: string): Promise<string | null>;
 }

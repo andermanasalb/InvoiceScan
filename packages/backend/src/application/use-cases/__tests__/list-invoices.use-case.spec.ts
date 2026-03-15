@@ -30,6 +30,7 @@ describe('ListInvoicesUseCase', () => {
       countByStatus: vi.fn(),
       countByStatusForUploader: vi.fn(),
       countByStatusForUploaderIds: vi.fn(),
+      findUploaderEmail: vi.fn(),
     };
 
     mockAssignmentRepo = {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { PinoLogger } from 'nestjs-pino';
 import { InvoiceApprovedHandler } from '../invoice-approved.handler';
 import { InvoiceApprovedEvent } from '../../../../domain/events/invoice-approved.event';
 import type { NotificationPort } from '../../../../application/ports/notification.port';
@@ -75,6 +76,13 @@ describe('InvoiceApprovedHandler', () => {
   });
 
   beforeEach(() => {
+    const mockLogger = {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn(),
+    } as unknown as PinoLogger;
+
     mockNotifier = { notifyStatusChange: vi.fn().mockResolvedValue(undefined) };
 
     mockInvoiceRepo = {
@@ -87,6 +95,7 @@ describe('InvoiceApprovedHandler', () => {
       countByStatusForUploader: vi.fn(),
       findByUploaderIds: vi.fn(),
       countByStatusForUploaderIds: vi.fn(),
+      findUploaderEmail: vi.fn(),
     };
 
     mockUserRepo = {
@@ -108,6 +117,7 @@ describe('InvoiceApprovedHandler', () => {
     };
 
     handler = new InvoiceApprovedHandler(
+      mockLogger,
       mockNotifier,
       mockInvoiceRepo,
       mockUserRepo,

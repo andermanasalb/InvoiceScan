@@ -14,7 +14,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { Invoice } from '../../../domain/entities';
 import {
   InvoiceRepository,
@@ -38,6 +38,15 @@ export class InvoiceTypeOrmRepository implements InvoiceRepository {
     @InjectRepository(InvoiceOrmEntity)
     private readonly repo: Repository<InvoiceOrmEntity>,
   ) {}
+
+  /**
+   * Returns a new instance of InvoiceTypeOrmRepository scoped to the
+   * provided EntityManager. Used by TypeOrmUnitOfWork to share a single
+   * database transaction across multiple repositories.
+   */
+  forManager(em: EntityManager): InvoiceTypeOrmRepository {
+    return new InvoiceTypeOrmRepository(em.getRepository(InvoiceOrmEntity));
+  }
 
   async findById(id: string): Promise<Invoice | null> {
     const orm = await this.repo.findOneBy({ id });

@@ -1,4 +1,5 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Job } from 'bullmq';
 import { mkdir, writeFile } from 'fs/promises';
@@ -34,10 +35,11 @@ export interface ExportJobData extends ExportJobOptions {
 @Processor(EXPORT_INVOICE_QUEUE)
 @Injectable()
 export class ExportInvoicesWorker extends WorkerHost {
-  private readonly logger = new Logger(ExportInvoicesWorker.name);
   private readonly exportsDir = join(process.cwd(), 'exports');
 
   constructor(
+    @InjectPinoLogger(ExportInvoicesWorker.name)
+    private readonly logger: PinoLogger,
     @Inject(EXPORT_INVOICE_REPOSITORY_TOKEN)
     private readonly invoiceRepo: InvoiceRepository,
     @Inject(EXPORT_ASSIGNMENT_REPOSITORY_TOKEN)
@@ -50,7 +52,7 @@ export class ExportInvoicesWorker extends WorkerHost {
     const { jobId, format, requesterId, requesterRole, status, sort } =
       job.data;
 
-    this.logger.log('Export job started', { jobId, format, requesterRole });
+    this.logger.info({ jobId, format, requesterRole }, 'Export job started');
 
     // Fetch ALL matching invoices (no pagination — export is full dataset)
     const filters = { status, sort, page: 1, limit: 100_000 };
@@ -60,10 +62,10 @@ export class ExportInvoicesWorker extends WorkerHost {
       filters,
     );
 
-    this.logger.log('Fetched invoices for export', {
-      jobId,
-      count: invoices.length,
-    });
+    this.logger.info(
+      { jobId, count: invoices.length },
+      'Fetched invoices for export',
+    );
 
     // Serialise
     const content =
@@ -77,7 +79,7 @@ export class ExportInvoicesWorker extends WorkerHost {
     const filePath = join(this.exportsDir, `${jobId}.${ext}`);
     await writeFile(filePath, content, 'utf8');
 
-    this.logger.log('Export file written', { jobId, filePath });
+    this.logger.info({ jobId, filePath }, 'Export file written');
   }
 
   // ---------------------------------------------------------------------------

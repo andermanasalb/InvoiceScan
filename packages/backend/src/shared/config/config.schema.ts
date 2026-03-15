@@ -18,6 +18,9 @@ export const ConfigSchema = z.object({
   GOOGLE_VISION_API_KEY: z.string().optional(),
   AISTUDIO_API_KEY: z.string().optional(),
   AISTUDIO_MODEL: z.string().optional(),
+  // OpenTelemetry — optional, app starts normally without a collector
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().url().optional(),
+  OTEL_SERVICE_NAME: z.string().default('invoice-flow-backend'),
 });
 
 export type AppConfig = z.infer<typeof ConfigSchema>;

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { EntityManager, Repository } from 'typeorm';
 import { randomUUID } from 'crypto';
 import { OutboxEventOrmEntity } from '../entities/outbox-event.orm-entity.js';
 import {
@@ -15,6 +15,16 @@ export class OutboxEventTypeOrmRepository implements OutboxEventRepository {
     @InjectRepository(OutboxEventOrmEntity)
     private readonly repo: Repository<OutboxEventOrmEntity>,
   ) {}
+
+  /**
+   * Returns a new instance scoped to the provided EntityManager.
+   * Used by TypeOrmUnitOfWork to share a single database transaction.
+   */
+  forManager(em: EntityManager): OutboxEventTypeOrmRepository {
+    return new OutboxEventTypeOrmRepository(
+      em.getRepository(OutboxEventOrmEntity),
+    );
+  }
 
   async save(event: DomainEventBase): Promise<void> {
     const record = this.repo.create({

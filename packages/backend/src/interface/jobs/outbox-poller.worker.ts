@@ -1,13 +1,15 @@
 import {
   Inject,
   Injectable,
-  Logger,
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { trace } from '@opentelemetry/api';
 import type { OutboxEventRepository } from '../../domain/repositories/outbox-event.repository';
 import { OUTBOX_EVENT_REPOSITORY } from '../../domain/repositories/outbox-event.repository';
+import { outboxEventsProcessedCounter } from '../../shared/metrics/metrics';
 
 export const OUTBOX_POLLER_QUEUE = 'outbox-poller';
 
@@ -31,11 +33,12 @@ export const OUTBOX_POLLER_QUEUE = 'outbox-poller';
  */
 @Injectable()
 export class OutboxPollerWorker implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(OutboxPollerWorker.name);
   private intervalHandle: ReturnType<typeof setInterval> | null = null;
   private running = false;
 
   constructor(
+    @InjectPinoLogger(OutboxPollerWorker.name)
+    private readonly logger: PinoLogger,
     @Inject(OUTBOX_EVENT_REPOSITORY)
     private readonly outboxRepo: OutboxEventRepository,
     private readonly eventEmitter: EventEmitter2,
@@ -45,7 +48,7 @@ export class OutboxPollerWorker implements OnModuleInit, OnModuleDestroy {
     this.intervalHandle = setInterval(() => {
       void this.poll();
     }, 10_000);
-    this.logger.log('OutboxPollerWorker: iniciado (intervalo cada 10s)');
+    this.logger.info('OutboxPollerWorker: iniciado (intervalo cada 10s)');
   }
 
   onModuleDestroy(): void {
@@ -53,7 +56,7 @@ export class OutboxPollerWorker implements OnModuleInit, OnModuleDestroy {
       clearInterval(this.intervalHandle);
       this.intervalHandle = null;
     }
-    this.logger.log('OutboxPollerWorker: detenido');
+    this.logger.info('OutboxPollerWorker: detenido');
   }
 
   /**
@@ -64,34 +67,41 @@ export class OutboxPollerWorker implements OnModuleInit, OnModuleDestroy {
     if (this.running) return;
     this.running = true;
 
-    try {
-      const events = await this.outboxRepo.findUnprocessed();
-      if (events.length === 0) return;
+    const tracer = trace.getTracer('invoice-flow-backend');
+    await tracer.startActiveSpan('outbox.poll', async (span) => {
+      try {
+        const events = await this.outboxRepo.findUnprocessed();
+        if (events.length === 0) return;
 
-      this.logger.log(
-        `OutboxPollerWorker: procesando ${events.length} evento(s)`,
-      );
+        this.logger.info(
+          { count: events.length },
+          'OutboxPollerWorker: procesando eventos',
+        );
 
-      for (const event of events) {
-        try {
-          await this.eventEmitter.emitAsync(event.eventType, event);
-          await this.outboxRepo.markProcessed(event.id);
-          this.logger.log('OutboxPollerWorker: evento procesado', {
-            id: event.id,
-            eventType: event.eventType,
-          });
-        } catch (err) {
-          this.logger.error(
-            `OutboxPollerWorker: error procesando evento ${event.id}`,
-            {
-              eventType: event.eventType,
-              error: err instanceof Error ? err.message : String(err),
-            },
-          );
+        for (const event of events) {
+          try {
+            await this.eventEmitter.emitAsync(event.eventType, event);
+            await this.outboxRepo.markProcessed(event.id);
+            outboxEventsProcessedCounter.add(1, { eventType: event.eventType });
+            this.logger.info(
+              { id: event.id, eventType: event.eventType },
+              'OutboxPollerWorker: evento procesado',
+            );
+          } catch (err) {
+            this.logger.error(
+              {
+                id: event.id,
+                eventType: event.eventType,
+                error: err instanceof Error ? err.message : String(err),
+              },
+              `OutboxPollerWorker: error procesando evento ${event.id}`,
+            );
+          }
         }
+      } finally {
+        this.running = false;
+        span.end();
       }
-    } finally {
-      this.running = false;
-    }
+    });
   }
 }
