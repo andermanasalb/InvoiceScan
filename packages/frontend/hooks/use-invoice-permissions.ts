@@ -7,7 +7,7 @@
  */
 'use client';
 
-import type { Invoice } from '@/types/invoice';
+import type { Invoice } from '@invoice-flow/shared';
 
 interface UseInvoicePermissionsParams {
   invoice: Invoice | undefined;

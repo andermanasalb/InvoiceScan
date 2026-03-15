@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { invoiceApi } from '@/lib/api';
 import type { AxiosError } from 'axios';
-import type { ApiError } from '@/types/auth';
-import { GENERIC_PROVIDER_ID } from '@/types/invoice';
+import type { ApiError } from '@invoice-flow/shared';
+import { GENERIC_PROVIDER_ID } from '@invoice-flow/shared';
 
 export function useApproveInvoice() {
   const queryClient = useQueryClient();

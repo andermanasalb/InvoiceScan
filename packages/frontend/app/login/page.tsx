@@ -23,7 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
-import type { ApiError } from '@/types/auth';
+import type { ApiError } from '@invoice-flow/shared';
 
 type LoginFormData = {
   email: string;

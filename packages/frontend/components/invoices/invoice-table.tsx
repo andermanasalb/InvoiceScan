@@ -15,7 +15,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from './status-badge';
 import { CopyableId } from '@/components/ui/copyable-id';
 import { staggerContainer, staggerItem } from '@/components/layout/page-transition';
-import type { Invoice, UserRole } from '@/types/invoice';
+import type { Invoice, UserRole } from '@invoice-flow/shared';
 
 interface InvoiceTableProps {
   invoices: Invoice[];

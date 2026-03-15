@@ -5,6 +5,7 @@ import { InvoiceEventRepository } from '../../domain/repositories/invoice-event.
 import { InvoiceEvent } from '../../domain/entities/invoice-event.entity';
 import { InvoiceStatusEnum } from '../../domain/value-objects';
 import { AuditPort } from '../ports';
+import { EventBusPort } from '../ports/event-bus.port';
 import { DomainError } from '../../domain/errors/domain.error';
 import {
   InvoiceNotFoundError,
@@ -14,6 +15,7 @@ import {
   SendToApprovalInput,
   SendToApprovalOutput,
 } from '../dtos/send-to-approval.dto';
+import { InvoiceSentForApprovalEvent } from '../../domain/events/invoice-sent-for-approval.event';
 
 /**
  * SendToApprovalUseCase
@@ -31,7 +33,8 @@ export class SendToApprovalUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
     private readonly auditor: AuditPort,
-    private readonly invoiceEventRepo?: InvoiceEventRepository,
+    private readonly invoiceEventRepo: InvoiceEventRepository,
+    private readonly eventBus: EventBusPort,
   ) {}
 
   async execute(
@@ -63,19 +66,26 @@ export class SendToApprovalUseCase {
 
     await this.invoiceRepo.save(invoice);
 
-    if (this.invoiceEventRepo) {
-      const event = InvoiceEvent.create({
-        id: randomUUID(),
+    const invoiceEvent = InvoiceEvent.create({
+      id: randomUUID(),
+      invoiceId: invoice.getId(),
+      from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+      to: invoice
+        .getStatus()
+        .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
+      userId: input.validatorId,
+      timestamp: new Date(),
+    });
+    if (invoiceEvent.isOk())
+      await this.invoiceEventRepo.save(invoiceEvent.value);
+
+    await this.eventBus.publish(
+      new InvoiceSentForApprovalEvent({
         invoiceId: invoice.getId(),
-        from: fromStatus as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        to: invoice
-          .getStatus()
-          .getValue() as (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum],
-        userId: input.validatorId,
-        timestamp: new Date(),
-      });
-      if (event.isOk()) await this.invoiceEventRepo.save(event.value);
-    }
+        sentById: input.validatorId,
+        status: invoice.getStatus().getValue(),
+      }),
+    );
 
     await this.auditor.record({
       action: 'send_to_approval',

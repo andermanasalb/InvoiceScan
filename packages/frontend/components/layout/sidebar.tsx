@@ -17,7 +17,7 @@ import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import type { UserRole } from '@/types/invoice';
+import type { UserRole } from '@invoice-flow/shared';
 
 interface NavItem {
   href: string;

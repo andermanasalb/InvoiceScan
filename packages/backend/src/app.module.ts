@@ -23,6 +23,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
 import { AdminModule } from './admin.module';
+import { ExportsModule } from './exports.module';
 import { JobsModule } from './interface/jobs/jobs.module';
 import { AuthModule } from './interface/auth.module';
 import { HealthController } from './interface/http/controllers/health.controller';
@@ -30,6 +31,7 @@ import { JwtAuthGuard } from './interface/http/guards/jwt-auth.guard';
 import { RolesGuard } from './interface/http/guards/roles.guard';
 import { validateConfig } from './shared/config/config.schema';
 import { PROCESS_INVOICE_QUEUE } from './infrastructure/queue/invoice-queue.service';
+import { EXPORT_INVOICE_QUEUE } from './infrastructure/queue/export-queue.service';
 
 const config = validateConfig();
 
@@ -50,6 +52,10 @@ const bullBoardModules =
         }),
         BullBoardModule.forFeature({
           name: PROCESS_INVOICE_QUEUE,
+          adapter: BullMQAdapter,
+        }),
+        BullBoardModule.forFeature({
+          name: EXPORT_INVOICE_QUEUE,
           adapter: BullMQAdapter,
         }),
       ]
@@ -78,6 +84,7 @@ const bullBoardModules =
     DatabaseModule,
     InvoicesModule,
     AdminModule,
+    ExportsModule,
     JobsModule,
     AuthModule,
   ],

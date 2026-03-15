@@ -51,7 +51,7 @@ import { useInvoiceEvents } from '@/hooks/use-invoice-events';
 import { useApproveInvoice, useRejectInvoice, useSendToApprovalWithNote, useSendToValidation, useRetryInvoice } from '@/hooks/use-invoice-mutations';
 import { useInvoicePermissions } from '@/hooks/use-invoice-permissions';
 import { useAuth } from '@/context/auth-context';
-import { formatProviderName } from '@/types/invoice';
+import { formatProviderName } from '@invoice-flow/shared';
 import { formatAmount } from '@/lib/utils';
 import { invoiceApi } from '@/lib/api';
 

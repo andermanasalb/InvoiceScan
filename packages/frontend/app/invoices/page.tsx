@@ -28,10 +28,11 @@ import { EmptyState } from '@/components/ui/empty-state';
 import { ApproveDialog } from '@/components/invoices/approve-dialog';
 import { RejectModal } from '@/components/invoices/reject-modal';
 import { SendToApprovalModal } from '@/components/invoices/send-to-approval-modal';
+import { ExportButton } from '@/components/invoices/export-button';
 import { useInvoices } from '@/hooks/use-invoices';
 import { useApproveInvoice, useRejectInvoice, useSendToApprovalWithNote, useSendToValidation } from '@/hooks/use-invoice-mutations';
 import { useAuth } from '@/context/auth-context';
-import type { InvoiceStatus } from '@/types/invoice';
+import type { InvoiceStatus } from '@invoice-flow/shared';
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Statuses' },
@@ -197,6 +198,14 @@ function InvoiceListContent() {
             ))}
           </SelectContent>
         </Select>
+
+        {/* Export — visible for non-uploaders only */}
+        {role !== 'uploader' && (
+          <ExportButton
+            status={status !== 'ALL' ? status : undefined}
+            sort={sort !== 'createdAt:desc' ? sort : undefined}
+          />
+        )}
       </div>
 
       {/* Table */}

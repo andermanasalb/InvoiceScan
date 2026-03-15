@@ -10,9 +10,7 @@ import {
  * Placeholder implementation of NotificationPort that simply logs the
  * notification payload. No real email is sent.
  *
- * FASE 11 will replace this with a NodemailerAdapter that sends actual emails
- * via the InvoiceApprovedHandler / InvoiceRejectedHandler (EventEmitter2).
- * Neither use cases nor controllers need to change when that swap happens.
+ * Kept as a fallback / test double. Production uses ResendAdapter.
  */
 @Injectable()
 export class NoOpNotificationAdapter implements NotificationPort {
@@ -21,7 +19,8 @@ export class NoOpNotificationAdapter implements NotificationPort {
   notifyStatusChange(payload: InvoiceNotificationPayload): Promise<void> {
     this.logger.log('Notification (no-op)', {
       invoiceId: payload.invoiceId,
-      status: payload.status,
+      eventType: payload.eventType,
+      toEmails: payload.toEmails,
     });
     return Promise.resolve();
   }

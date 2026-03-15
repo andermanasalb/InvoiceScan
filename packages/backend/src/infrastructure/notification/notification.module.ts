@@ -1,20 +1,26 @@
 import { Module } from '@nestjs/common';
-import { NoOpNotificationAdapter } from './no-op-notification.adapter';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ResendAdapter } from './resend.adapter';
 import { NOTIFICATION_TOKEN } from '../events/handlers/invoice-approved.handler';
 
 /**
  * NotificationModule
  *
- * Registers the notification adapter under NOTIFICATION_TOKEN.
- *
- * FASE 9 (now): NoOpNotificationAdapter — logs only, no emails sent.
- * FASE 11: swap useClass to NodemailerAdapter here. Nothing else changes.
+ * Registers the ResendAdapter under NOTIFICATION_TOKEN.
+ * RESEND_API_KEY and RESEND_FROM_EMAIL are read from ConfigService.
  */
 @Module({
+  imports: [ConfigModule],
   providers: [
     {
       provide: NOTIFICATION_TOKEN,
-      useClass: NoOpNotificationAdapter,
+      useFactory: (config: ConfigService): ResendAdapter =>
+        new ResendAdapter(
+          config.getOrThrow<string>('RESEND_API_KEY'),
+          config.get<string>('RESEND_FROM_EMAIL') ??
+            'InvoiceScan <onboarding@resend.dev>',
+        ),
+      inject: [ConfigService],
     },
   ],
   exports: [NOTIFICATION_TOKEN],

@@ -9,7 +9,7 @@ import {
   useRemoveUploaderAssignment,
   useRemoveValidatorAssignment,
 } from '@/hooks/use-admin';
-import type { AssignmentTree, ApproverNode, ValidatorNode, UserNode } from '@/types/admin';
+import type { AssignmentTree, ApproverNode, ValidatorNode, UserNode } from '@invoice-flow/shared';
 
 const roleColors: Record<string, string> = {
   approver:  'border-amber-500/30 text-amber-400',

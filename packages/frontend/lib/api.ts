@@ -206,6 +206,42 @@ export const invoiceApi = {
     const response = await api.get(`/invoices/${id}/file`, { responseType: 'blob' });
     return response.data as Blob;
   },
+
+  /**
+   * POST /invoices/export
+   * Enqueues an async export job. Returns { jobId }.
+   */
+  export: async (params: {
+    format: 'csv' | 'json';
+    status?: string;
+    sort?: string;
+  }): Promise<{ data: { jobId: string } }> => {
+    const response = await api.post('/invoices/export', null, { params });
+    return response.data as { data: { jobId: string } };
+  },
+
+  /**
+   * GET /exports/:jobId/status
+   * Polls the export job. Returns status + downloadUrl when done.
+   */
+  getExportStatus: async (jobId: string): Promise<{
+    data: {
+      status: 'pending' | 'processing' | 'done' | 'failed';
+      progress: number;
+      downloadUrl: string | null;
+      format: string | null;
+    };
+  }> => {
+    const response = await api.get(`/exports/${jobId}/status`);
+    return response.data as {
+      data: {
+        status: 'pending' | 'processing' | 'done' | 'failed';
+        progress: number;
+        downloadUrl: string | null;
+        format: string | null;
+      };
+    };
+  },
 };
 
 // Admin API functions (admin role only)

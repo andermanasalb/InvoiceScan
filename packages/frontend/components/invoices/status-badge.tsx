@@ -12,7 +12,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { InvoiceStatus } from '@/types/invoice';
+import type { InvoiceStatus } from '@invoice-flow/shared';
 
 const statusConfig: Record<InvoiceStatus, {
   label: string;

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { invoiceApi } from '@/lib/api';
-import type { Invoice, InvoiceStatus } from '@/types/invoice';
+import type { Invoice, InvoiceStatus } from '@invoice-flow/shared';
 
 const TERMINAL_STATUSES: InvoiceStatus[] = ['APPROVED', 'REJECTED', 'VALIDATION_FAILED'];
 // EXTRACTED, READY_FOR_VALIDATION and READY_FOR_APPROVAL are human-gated — no need to poll further

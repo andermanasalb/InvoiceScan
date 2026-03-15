@@ -15,7 +15,7 @@ import {
   Cell,
 } from 'recharts';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
-import type { Invoice } from '@/types/invoice';
+import type { Invoice } from '@invoice-flow/shared';
 
 // Custom tooltip for the charts
 const CustomTooltip = ({

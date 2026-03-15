@@ -18,12 +18,19 @@ import { LLM_TOKEN } from '../../application/ports/llm.port';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository';
 import { InvoiceApprovedHandler } from '../../infrastructure/events/handlers/invoice-approved.handler';
 import { InvoiceRejectedHandler } from '../../infrastructure/events/handlers/invoice-rejected.handler';
+import { InvoiceSentForValidationHandler } from '../../infrastructure/events/handlers/invoice-sent-for-validation.handler';
+import { InvoiceSentForApprovalHandler } from '../../infrastructure/events/handlers/invoice-sent-for-approval.handler';
 import { ProcessInvoiceUseCase } from '../../application/use-cases/process-invoice.use-case';
 import {
   ProcessInvoiceWorker,
   PROCESS_INVOICE_USE_CASE_TOKEN,
 } from './process-invoice.worker';
 import { OutboxPollerWorker } from './outbox-poller.worker';
+import {
+  ExportInvoicesWorker,
+  EXPORT_INVOICE_REPOSITORY_TOKEN,
+  EXPORT_ASSIGNMENT_REPOSITORY_TOKEN,
+} from './export-invoices.worker';
 import type { InvoiceRepository } from '../../domain/repositories';
 import type { InvoiceEventRepository } from '../../domain/repositories/invoice-event.repository';
 import type { StoragePort } from '../../application/ports/storage.port';
@@ -31,6 +38,7 @@ import type { AuditPort } from '../../application/ports/audit.port';
 import type { OcrPort } from '../../application/ports/ocr.port';
 import type { LLMPort } from '../../application/ports/llm.port';
 import type { AuditEventRepository } from '../../domain/repositories/audit-event.repository';
+import { ASSIGNMENT_REPOSITORY } from '../../domain/repositories/assignment.repository';
 
 // Re-use the same token name as InvoicesModule for consistency within this module scope
 const JOBS_AUDIT_TOKEN = AUDIT_PORT_TOKEN;
@@ -101,9 +109,21 @@ const JOBS_AUDIT_TOKEN = AUDIT_PORT_TOKEN;
     ProcessInvoiceWorker,
     // Worker — polls outbox_events every 10 s and emits via EventEmitter
     OutboxPollerWorker,
-    // Event handlers — wired with NotificationPort (no-op until FASE 11)
+    // Event handlers — wired with NotificationPort + DB repos (FASE 11)
     InvoiceApprovedHandler,
     InvoiceRejectedHandler,
+    InvoiceSentForValidationHandler,
+    InvoiceSentForApprovalHandler,
+    // Worker — consumes jobs from the 'export-invoices' queue (FASE 12)
+    {
+      provide: EXPORT_INVOICE_REPOSITORY_TOKEN,
+      useExisting: 'InvoiceRepository',
+    },
+    {
+      provide: EXPORT_ASSIGNMENT_REPOSITORY_TOKEN,
+      useExisting: ASSIGNMENT_REPOSITORY,
+    },
+    ExportInvoicesWorker,
   ],
 })
 export class JobsModule {}

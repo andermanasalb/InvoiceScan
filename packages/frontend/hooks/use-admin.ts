@@ -3,9 +3,10 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { adminApi } from '@/lib/api';
-import type { AdminUser, AssignmentTree, AdminRole } from '@/types/admin';
+import type { AssignmentTree } from '@invoice-flow/shared';
+import type { AdminUser, AdminRole } from '@/types/admin';
 import type { AxiosError } from 'axios';
-import type { ApiError } from '@/types/auth';
+import type { ApiError } from '@invoice-flow/shared';
 
 export function useAdminUsers(role?: AdminRole) {
   return useQuery<AdminUser[]>({

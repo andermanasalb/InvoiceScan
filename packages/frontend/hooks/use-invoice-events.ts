@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { invoiceApi } from '@/lib/api';
-import type { InvoiceEvent, InvoiceStatus } from '@/types/invoice';
+import type { InvoiceEvent, InvoiceStatus } from '@invoice-flow/shared';
 
 const NON_POLLING_STATUSES: InvoiceStatus[] = [
   'APPROVED',

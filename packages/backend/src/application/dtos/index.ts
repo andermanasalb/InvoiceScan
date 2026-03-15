@@ -8,3 +8,4 @@ export * from './create-provider.dto';
 export * from './create-user.dto';
 export * from './auth.dto';
 export * from './get-invoice-stats.dto';
+export * from './export-invoices.dto';

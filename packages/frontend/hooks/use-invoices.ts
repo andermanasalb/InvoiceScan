@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { invoiceApi } from '@/lib/api';
-import type { Invoice, InvoiceStatus } from '@/types/invoice';
+import type { Invoice, InvoiceStatus } from '@invoice-flow/shared';
 
 interface UseInvoicesParams {
   status?: InvoiceStatus | 'ALL';

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { format } from 'date-fns';
 import { StatusBadge } from './status-badge';
 import { staggerContainer, staggerItem } from '@/components/layout/page-transition';
-import type { InvoiceEvent, InvoiceStatus } from '@/types/invoice';
+import type { InvoiceEvent, InvoiceStatus } from '@invoice-flow/shared';
 
 interface InvoiceEventTimelineProps {
   events: InvoiceEvent[];

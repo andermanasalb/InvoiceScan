@@ -207,8 +207,20 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
         invoiceRepo: InvoiceRepository,
         auditor: AuditPort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new SendToApprovalUseCase(invoiceRepo, auditor, invoiceEventRepo),
-      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, INVOICE_EVENT_REPOSITORY],
+        eventBus: EventBusPort,
+      ) =>
+        new SendToApprovalUseCase(
+          invoiceRepo,
+          auditor,
+          invoiceEventRepo,
+          eventBus,
+        ),
+      inject: [
+        'InvoiceRepository',
+        AUDIT_PORT_TOKEN,
+        INVOICE_EVENT_REPOSITORY,
+        EVENT_BUS_TOKEN,
+      ],
     },
 
     {
@@ -217,8 +229,20 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
         invoiceRepo: InvoiceRepository,
         auditor: AuditPort,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new SendToValidationUseCase(invoiceRepo, auditor, invoiceEventRepo),
-      inject: ['InvoiceRepository', AUDIT_PORT_TOKEN, INVOICE_EVENT_REPOSITORY],
+        eventBus: EventBusPort,
+      ) =>
+        new SendToValidationUseCase(
+          invoiceRepo,
+          auditor,
+          invoiceEventRepo,
+          eventBus,
+        ),
+      inject: [
+        'InvoiceRepository',
+        AUDIT_PORT_TOKEN,
+        INVOICE_EVENT_REPOSITORY,
+        EVENT_BUS_TOKEN,
+      ],
     },
 
     {

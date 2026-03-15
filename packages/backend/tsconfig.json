@@ -21,7 +21,10 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false,
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals"],
+    "paths": {
+      "@invoice-flow/shared": ["../shared/src/index.ts"]
+    }
   },
   "exclude": ["test/**/*", "dist"]
 }

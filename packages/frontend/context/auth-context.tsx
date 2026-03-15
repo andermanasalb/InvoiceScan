@@ -4,7 +4,7 @@ import React, { createContext, useContext, useReducer, useCallback } from 'react
 import { useRouter } from 'next/navigation';
 import { authApi, setAccessToken } from '@/lib/api';
 import type { AuthState, LoginCredentials } from '@/types/auth';
-import type { UserRole } from '@/types/invoice';
+import type { UserRole } from '@invoice-flow/shared';
 
 // sessionStorage keys — solo metadatos, NUNCA el accessToken
 const SESSION_KEY_USER_ID = 'auth:userId';

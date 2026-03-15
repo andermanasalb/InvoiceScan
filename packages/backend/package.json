@@ -25,6 +25,7 @@
     "seed": "ts-node -r tsconfig-paths/register src/infrastructure/db/seeds/seed.ts"
   },
   "dependencies": {
+    "@invoice-flow/shared": "workspace:*",
     "@bull-board/api": "^6.20.3",
     "@bull-board/express": "^6.20.3",
     "@bull-board/nestjs": "^6.20.3",
@@ -54,6 +55,7 @@
     "pdfjs-dist": "^5.5.207",
     "pg": "^8.20.0",
     "reflect-metadata": "^0.2.2",
+    "resend": "^6.9.3",
     "rxjs": "^7.8.1",
     "tesseract.js": "^7.0.0",
     "typeorm": "^0.3.28",
@@ -76,7 +78,6 @@
     "@types/node": "^22.10.7",
     "@types/passport": "^1.0.17",
     "@types/passport-jwt": "^4.0.1",
-
     "@types/pg": "^8.18.0",
     "@types/supertest": "^6.0.2",
     "@vitest/coverage-v8": "^4.0.18",
