@@ -1,16 +1,14 @@
 import { Module } from '@nestjs/common';
-import {
-  NoOpNotificationAdapter,
-  NOTIFICATION_TOKEN,
-} from './no-op-notification.adapter';
+import { NoOpNotificationAdapter } from './no-op-notification.adapter';
+import { NOTIFICATION_TOKEN } from '../events/handlers/invoice-approved.handler';
 
 /**
  * NotificationModule
  *
- * Registra el adaptador de notificaciones bajo NOTIFICATION_TOKEN.
+ * Registers the notification adapter under NOTIFICATION_TOKEN.
  *
- * FASE 9 (ahora): NoOpNotificationAdapter — solo loguea, no envía emails.
- * FASE 11: cambiar useClass a NodemailerAdapter aquí. Nada más cambia.
+ * FASE 9 (now): NoOpNotificationAdapter — logs only, no emails sent.
+ * FASE 11: swap useClass to NodemailerAdapter here. Nothing else changes.
  */
 @Module({
   providers: [

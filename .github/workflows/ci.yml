@@ -46,8 +46,8 @@ jobs:
       - name: Typecheck
         run: pnpm --filter backend typecheck
 
-      - name: Unit tests
-        run: pnpm --filter backend test
+      - name: Unit tests with coverage
+        run: pnpm --filter backend test:cov
 
       - name: Build
         run: pnpm --filter backend build
@@ -99,6 +99,10 @@ jobs:
 
       - name: Typecheck
         run: pnpm --filter frontend typecheck
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+        working-directory: packages/frontend
 
       - name: Build
         run: pnpm --filter frontend build

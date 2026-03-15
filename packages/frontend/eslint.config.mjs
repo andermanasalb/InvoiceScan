@@ -4,16 +4,13 @@
  * Stack:
  *   - ESLint 9 (flat config API)
  *   - typescript-eslint v8 for TypeScript-aware rules
+ *   - @next/eslint-plugin-next for Next.js-specific rules (App Router, images, etc.)
  *   - eslint-config-prettier to disable formatting rules that conflict with Prettier
- *
- * Next.js-specific plugin (@next/eslint-plugin-next) is intentionally omitted
- * here because it requires `eslint-config-next` which pulls in a large set of
- * peer dependencies not yet added to this workspace.  Add it in FASE 12 when
- * the shared package is set up and the full lint pipeline is wired.
  */
 
 import tseslint from 'typescript-eslint';
 import prettierConfig from 'eslint-config-prettier';
+import nextPlugin from '@next/eslint-plugin-next';
 
 export default tseslint.config(
   // Base TypeScript rules (recommended set)
@@ -26,6 +23,10 @@ export default tseslint.config(
     // Files to lint
     files: ['**/*.{ts,tsx}'],
 
+    plugins: {
+      '@next/next': nextPlugin,
+    },
+
     languageOptions: {
       parserOptions: {
         // Type-aware linting — requires tsconfig.json to be present
@@ -35,8 +36,11 @@ export default tseslint.config(
     },
 
     rules: {
+      // ── Next.js core rules ─────────────────────────────────────────────────
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs['core-web-vitals'].rules,
+
       // ── TypeScript ─────────────────────────────────────────────────────────
-      // Disallow `any` — use `unknown` + type guards instead
       '@typescript-eslint/no-explicit-any': 'error',
 
       // Allow unused vars that start with _ (conventional placeholder)
@@ -61,10 +65,7 @@ export default tseslint.config(
       ],
 
       // ── General ────────────────────────────────────────────────────────────
-      // Disallow console.log — use structured logger or remove before commit
       'no-console': ['warn', { allow: ['warn', 'error'] }],
-
-      // Disallow debugger statements
       'no-debugger': 'error',
     },
   },

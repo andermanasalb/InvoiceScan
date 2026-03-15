@@ -4,8 +4,6 @@ import {
   InvoiceNotificationPayload,
 } from '../../application/ports/notification.port';
 
-export const NOTIFICATION_TOKEN = 'NOTIFICATION_TOKEN';
-
 /**
  * NoOpNotificationAdapter
  *

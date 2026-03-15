@@ -53,9 +53,9 @@ import type { StoragePort } from './application/ports/storage.port';
 import type { AuditPort } from './application/ports/audit.port';
 import type { EventBusPort } from './application/ports/event-bus.port';
 import type { InvoiceQueuePort } from './application/ports/invoice-queue.port';
+import type { UserRepository } from './domain/repositories';
 import type { AssignmentRepository } from './domain/repositories/assignment.repository';
 import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.repository';
-import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoice.typeorm-repository';
 
 /**
  * InvoicesModule
@@ -138,11 +138,14 @@ import { InvoiceTypeOrmRepository } from './infrastructure/db/repositories/invoi
 
     {
       provide: GET_INVOICE_USE_CASE_TOKEN,
-      useFactory: (invoiceRepo: InvoiceTypeOrmRepository) =>
-        new GetInvoiceUseCase(invoiceRepo, (userId: string) =>
-          invoiceRepo.findUploaderEmail(userId),
-        ),
-      inject: ['InvoiceRepository'],
+      // Use UserRepository (domain interface) for email lookups — keeps
+      // InvoicesModule free of infrastructure concrete types (Clean Architecture).
+      useFactory: (invoiceRepo: InvoiceRepository, userRepo: UserRepository) =>
+        new GetInvoiceUseCase(invoiceRepo, async (userId: string) => {
+          const user = await userRepo.findById(userId);
+          return user?.getEmail() ?? null;
+        }),
+      inject: ['InvoiceRepository', 'UserRepository'],
     },
 
     {

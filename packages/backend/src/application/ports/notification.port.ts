@@ -1,8 +1,9 @@
 export interface InvoiceNotificationPayload {
   invoiceId: string;
   status: string;
-  recipientEmail: string;
-  recipientName: string;
+  /** Email resolved by FASE 11's NodemailerAdapter; optional until then. */
+  recipientEmail?: string;
+  recipientName?: string;
   providerName?: string;
   notes?: string;
 }

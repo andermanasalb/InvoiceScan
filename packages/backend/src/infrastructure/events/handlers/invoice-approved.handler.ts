@@ -1,27 +1,39 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Inject, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
 import { InvoiceApprovedEvent } from '../../../domain/events/invoice-approved.event';
+import type { NotificationPort } from '../../../application/ports/notification.port';
+
+export const NOTIFICATION_TOKEN = 'NOTIFICATION_TOKEN';
 
 /**
  * InvoiceApprovedHandler
  *
- * Escucha el evento 'invoice.approved' emitido por el OutboxPollerWorker.
+ * Listens to the 'invoice.approved' event emitted by OutboxPollerWorker.
  *
- * FASE 9 (ahora): solo loguea — no-op.
- * FASE 11: aquí se llamará a NodemailerAdapter para enviar el email de
- * confirmación al proveedor y al aprobador, sin tocar use cases ni controllers.
+ * FASE 9: no-op (just logs).
+ * FASE 11: NotificationModule swaps NoOpNotificationAdapter → NodemailerAdapter.
+ *           This handler stays identical — only the injected implementation changes.
  */
 @Injectable()
 export class InvoiceApprovedHandler {
   private readonly logger = new Logger(InvoiceApprovedHandler.name);
 
+  constructor(
+    @Inject(NOTIFICATION_TOKEN)
+    private readonly notifier: NotificationPort,
+  ) {}
+
   @OnEvent('invoice.approved', { async: true })
-  handle(event: InvoiceApprovedEvent): Promise<void> {
-    this.logger.log('invoice.approved recibido (no-op)', {
+  async handle(event: InvoiceApprovedEvent): Promise<void> {
+    this.logger.log('invoice.approved received', {
       invoiceId: event.payload.invoiceId,
       approverId: event.payload.approverId,
       status: event.payload.status,
     });
-    return Promise.resolve();
+
+    await this.notifier.notifyStatusChange({
+      invoiceId: event.payload.invoiceId,
+      status: event.payload.status,
+    });
   }
 }

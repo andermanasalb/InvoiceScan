@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
 import * as jwt from 'jsonwebtoken';
 
@@ -31,11 +32,6 @@ import { USER_CREDENTIAL_REPOSITORY } from '../infrastructure/db/repositories';
 import type { UserRepository } from '../domain/repositories';
 import type { UserCredentialRepository } from '../domain/repositories/user-credential.repository';
 
-const jwtSecret = process.env.JWT_SECRET ?? '';
-const jwtRefreshSecret = process.env.JWT_REFRESH_SECRET ?? '';
-const rawRedisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
-const redisUrl = new URL(rawRedisUrl);
-
 export const REDIS_CLIENT = 'REDIS_CLIENT';
 export const CREATE_USER_USE_CASE_TOKEN = 'CREATE_USER_USE_CASE';
 
@@ -43,25 +39,7 @@ export const CREATE_USER_USE_CASE_TOKEN = 'CREATE_USER_USE_CASE';
 const LOGIN_USE_CASE = 'LOGIN_USE_CASE';
 const REFRESH_TOKEN_USE_CASE = 'REFRESH_TOKEN_USE_CASE';
 const LOGOUT_USE_CASE = 'LOGOUT_USE_CASE';
-
-/**
- * Implements JwtSignPort & JwtVerifyPort using the jsonwebtoken library directly.
- * This avoids a circular dependency with @nestjs/jwt while keeping the ports
- * independent of NestJS infrastructure.
- */
-const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
-  signAccessToken: (payload) =>
-    jwt.sign(payload, jwtSecret, { expiresIn: '15m' }),
-  signRefreshToken: (payload) =>
-    jwt.sign(payload, jwtRefreshSecret, { expiresIn: '7d' }),
-  verifyRefreshToken: (token) => {
-    try {
-      return jwt.verify(token, jwtRefreshSecret) as { sub: string };
-    } catch {
-      return null;
-    }
-  },
-};
+const JWT_SIGNER_VERIFIER = 'JWT_SIGNER_VERIFIER';
 
 @Module({
   imports: [
@@ -69,10 +47,15 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
 
     PassportModule.register({ defaultStrategy: 'jwt' }),
 
-    // Used by JwtStrategy to verify access tokens on protected routes
-    JwtModule.register({
-      secret: jwtSecret,
-      signOptions: { expiresIn: '15m' },
+    // JWT secret read inside useFactory via ConfigService — never at module scope.
+    // This prevents the empty-string fallback that would allow token forgery
+    // if JWT_SECRET is missing from the environment.
+    JwtModule.registerAsync({
+      useFactory: (config: ConfigService) => ({
+        secret: config.getOrThrow<string>('JWT_SECRET'),
+        signOptions: { expiresIn: '15m' },
+      }),
+      inject: [ConfigService],
     }),
 
     // Global throttler: 100 req/min default; login route overrides to 5/min
@@ -83,14 +66,19 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
     // ── Global throttler guard ────────────────────────────────────────────
     { provide: APP_GUARD, useClass: ThrottlerGuard },
 
-    // ── Redis client ──────────────────────────────────────────────────────
+    // ── Redis client — URL read via ConfigService, not module-level constant ─
     {
       provide: REDIS_CLIENT,
-      useFactory: () =>
-        new Redis({
-          host: redisUrl.hostname,
-          port: Number(redisUrl.port) || 6379,
-        }),
+      useFactory: (config: ConfigService) => {
+        const url = new URL(
+          config.get<string>('REDIS_URL') ?? 'redis://localhost:6379',
+        );
+        return new Redis({
+          host: url.hostname,
+          port: Number(url.port) || 6379,
+        });
+      },
+      inject: [ConfigService],
     },
 
     // ── Token store (refresh tokens in Redis) ─────────────────────────────
@@ -103,10 +91,28 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
     // ── Passport JWT strategy ─────────────────────────────────────────────
     JwtStrategy,
 
-    // ── Shared JWT signer/verifier ────────────────────────────────────────
+    // ── JWT signer / verifier — secrets read via ConfigService ────────────
     {
-      provide: 'JWT_SIGNER_VERIFIER',
-      useValue: jwtSignerVerifier,
+      provide: JWT_SIGNER_VERIFIER,
+      useFactory: (config: ConfigService): JwtSignPort & JwtVerifyPort => {
+        const secret = config.getOrThrow<string>('JWT_SECRET');
+        const refreshSecret = config.getOrThrow<string>('JWT_REFRESH_SECRET');
+
+        return {
+          signAccessToken: (payload) =>
+            jwt.sign(payload, secret, { expiresIn: '15m' }),
+          signRefreshToken: (payload) =>
+            jwt.sign(payload, refreshSecret, { expiresIn: '7d' }),
+          verifyRefreshToken: (token) => {
+            try {
+              return jwt.verify(token, refreshSecret) as { sub: string };
+            } catch {
+              return null;
+            }
+          },
+        };
+      },
+      inject: [ConfigService],
     },
 
     // ── UserRoleLoader — reads role from UserRepository ───────────────────
@@ -142,7 +148,7 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
         'UserRepository',
         USER_CREDENTIAL_REPOSITORY,
         TOKEN_STORE_PORT,
-        'JWT_SIGNER_VERIFIER',
+        JWT_SIGNER_VERIFIER,
       ],
     },
     {
@@ -152,7 +158,7 @@ const jwtSignerVerifier: JwtSignPort & JwtVerifyPort = {
         verifier: JwtVerifyPort,
         roleLoader: UserRoleLoader,
       ) => new RefreshTokenUseCase(tokenStore, verifier, roleLoader),
-      inject: [TOKEN_STORE_PORT, 'JWT_SIGNER_VERIFIER', 'USER_ROLE_LOADER'],
+      inject: [TOKEN_STORE_PORT, JWT_SIGNER_VERIFIER, 'USER_ROLE_LOADER'],
     },
     {
       provide: LOGOUT_USE_CASE,

@@ -20,13 +20,12 @@ import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
 import { AdminModule } from './admin.module';
 import { JobsModule } from './interface/jobs/jobs.module';
 import { AuthModule } from './interface/auth.module';
+import { HealthController } from './interface/http/controllers/health.controller';
 import { JwtAuthGuard } from './interface/http/guards/jwt-auth.guard';
 import { RolesGuard } from './interface/http/guards/roles.guard';
 import { validateConfig } from './shared/config/config.schema';
@@ -82,9 +81,8 @@ const bullBoardModules =
     JobsModule,
     AuthModule,
   ],
-  controllers: [AppController],
+  controllers: [HealthController],
   providers: [
-    AppService,
     // JwtAuthGuard runs first globally — populates request.user from the JWT.
     // RolesGuard runs second — checks request.user.role against @Roles().
     // Order matters: JWT must validate before roles can be checked.

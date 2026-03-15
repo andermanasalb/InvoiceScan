@@ -16,6 +16,9 @@ import { Roles } from '../guards/roles.decorator';
 import { CurrentUser } from '../guards/current-user.decorator';
 import type { AuthenticatedUser } from '../guards/jwt.strategy';
 import { ZodValidationPipe } from '../pipes/zod-validation.pipe';
+// CREATE_USER_USE_CASE_TOKEN comes from AuthModule (already exported there).
+// AdminModule re-uses it via useExisting — no duplicate instantiation.
+import { CREATE_USER_USE_CASE_TOKEN } from '../../auth.module';
 import type { CreateUserUseCase } from '../../../application/use-cases/create-user.use-case';
 import type { ListUsersUseCase } from '../../../application/use-cases/list-users.use-case';
 import type { AssignUploaderUseCase } from '../../../application/use-cases/assign-uploader.use-case';
@@ -24,7 +27,8 @@ import type { RemoveAssignmentUseCase } from '../../../application/use-cases/rem
 import type { GetAssignmentTreeUseCase } from '../../../application/use-cases/get-assignment-tree.use-case';
 
 // ── Injection tokens ──────────────────────────────────────────────────────────
-export const ADMIN_CREATE_USER_TOKEN = 'ADMIN_CREATE_USER_USE_CASE';
+// CREATE_USER_USE_CASE_TOKEN is re-exported from auth.module — imported above.
+export { CREATE_USER_USE_CASE_TOKEN };
 export const ADMIN_LIST_USERS_TOKEN = 'ADMIN_LIST_USERS_USE_CASE';
 export const ADMIN_ASSIGN_UPLOADER_TOKEN = 'ADMIN_ASSIGN_UPLOADER_USE_CASE';
 export const ADMIN_ASSIGN_VALIDATOR_TOKEN = 'ADMIN_ASSIGN_VALIDATOR_USE_CASE';
@@ -65,7 +69,7 @@ type ListUsersQuery = z.infer<typeof ListUsersQuerySchema>;
 @Controller('api/v1/admin')
 export class AdminController {
   constructor(
-    @Inject(ADMIN_CREATE_USER_TOKEN)
+    @Inject(CREATE_USER_USE_CASE_TOKEN)
     private readonly createUserUseCase: CreateUserUseCase,
     @Inject(ADMIN_LIST_USERS_TOKEN)
     private readonly listUsersUseCase: ListUsersUseCase,

@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from './infrastructure/db/database.module';
-import { AuthModule } from './interface/auth.module';
-import { CreateUserUseCase } from './application/use-cases/create-user.use-case';
+import {
+  AuthModule,
+  CREATE_USER_USE_CASE_TOKEN,
+} from './interface/auth.module';
 import { ListUsersUseCase } from './application/use-cases/list-users.use-case';
 import { AssignUploaderUseCase } from './application/use-cases/assign-uploader.use-case';
 import { AssignValidatorUseCase } from './application/use-cases/assign-validator.use-case';
@@ -9,7 +11,6 @@ import { RemoveAssignmentUseCase } from './application/use-cases/remove-assignme
 import { GetAssignmentTreeUseCase } from './application/use-cases/get-assignment-tree.use-case';
 import {
   AdminController,
-  ADMIN_CREATE_USER_TOKEN,
   ADMIN_LIST_USERS_TOKEN,
   ADMIN_ASSIGN_UPLOADER_TOKEN,
   ADMIN_ASSIGN_VALIDATOR_TOKEN,
@@ -17,23 +18,27 @@ import {
   ADMIN_GET_TREE_TOKEN,
 } from './interface/http/controllers/admin.controller';
 import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.repository';
-import { USER_CREDENTIAL_REPOSITORY } from './infrastructure/db/repositories';
 
 import type { UserRepository } from './domain/repositories';
-import type { UserCredentialRepository } from './domain/repositories/user-credential.repository';
 import type { AssignmentRepository } from './domain/repositories/assignment.repository';
 
+/**
+ * AdminModule
+ *
+ * Handles user management and assignment hierarchy endpoints.
+ *
+ * CreateUserUseCase comes directly from AuthModule (which already exports
+ * CREATE_USER_USE_CASE_TOKEN) — no need to re-instantiate it here.
+ */
 @Module({
   imports: [DatabaseModule, AuthModule],
   controllers: [AdminController],
   providers: [
+    // Re-export AuthModule's CreateUserUseCase under the same token.
+    // AdminController injects CREATE_USER_USE_CASE_TOKEN directly.
     {
-      provide: ADMIN_CREATE_USER_TOKEN,
-      useFactory: (
-        userRepo: UserRepository,
-        credentialRepo: UserCredentialRepository,
-      ) => new CreateUserUseCase(userRepo, credentialRepo),
-      inject: ['UserRepository', USER_CREDENTIAL_REPOSITORY],
+      provide: CREATE_USER_USE_CASE_TOKEN,
+      useExisting: CREATE_USER_USE_CASE_TOKEN,
     },
     {
       provide: ADMIN_LIST_USERS_TOKEN,

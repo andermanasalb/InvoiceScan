@@ -4,10 +4,11 @@ import { DatabaseModule } from '../../infrastructure/db/database.module';
 import { StorageModule } from '../../infrastructure/storage/storage.module';
 import { STORAGE_TOKEN } from '../../infrastructure/storage/local-storage.adapter';
 import { QueueModule } from '../../infrastructure/queue/queue.module';
+import { NotificationModule } from '../../infrastructure/notification/notification.module';
 import {
-  NoOpAuditAdapter,
-  AUDIT_TOKEN,
-} from '../../infrastructure/audit/no-op-audit.adapter';
+  AuditAdapter,
+  AUDIT_PORT_TOKEN,
+} from '../../infrastructure/audit/audit.adapter';
 import {
   PdfParseAdapter,
   OCR_TOKEN,
@@ -29,26 +30,35 @@ import type { StoragePort } from '../../application/ports/storage.port';
 import type { AuditPort } from '../../application/ports/audit.port';
 import type { OcrPort } from '../../application/ports/ocr.port';
 import type { LLMPort } from '../../application/ports/llm.port';
+import type { AuditEventRepository } from '../../domain/repositories/audit-event.repository';
+
+// Re-use the same token name as InvoicesModule for consistency within this module scope
+const JOBS_AUDIT_TOKEN = AUDIT_PORT_TOKEN;
 
 @Module({
   imports: [
     DatabaseModule,
     StorageModule,
     QueueModule,
+    NotificationModule,
     // EventEmitterModule is already registered globally in AppModule — do NOT add forRoot() here.
   ],
   providers: [
-    // OCR adapter — extrae texto embebido de PDFs digitales
+    // OCR adapter — extracts embedded text from digital PDFs
     {
       provide: OCR_TOKEN,
       useClass: PdfParseAdapter,
     },
-    // Audit adapter (temporal)
+    // Audit adapter — persists all worker audit events to the database.
+    // Previously used NoOpAuditAdapter (FASE 4 temporary shim), now uses
+    // the real TypeORM-backed implementation (fixed in cleanup pass).
     {
-      provide: AUDIT_TOKEN,
-      useClass: NoOpAuditAdapter,
+      provide: JOBS_AUDIT_TOKEN,
+      useFactory: (auditRepo: AuditEventRepository): AuditPort =>
+        new AuditAdapter(auditRepo),
+      inject: ['AuditEventRepository'],
     },
-    // LLM adapter — lee API key y modelo desde ConfigService
+    // LLM adapter — reads API key and model from ConfigService
     {
       provide: LLM_TOKEN,
       useFactory: (config: ConfigService) => {
@@ -59,7 +69,7 @@ import type { LLMPort } from '../../application/ports/llm.port';
       },
       inject: [ConfigService],
     },
-    // Wire ProcessInvoiceUseCase con los 6 parámetros (incluye InvoiceEventRepository)
+    // Wire ProcessInvoiceUseCase with all 6 dependencies
     {
       provide: PROCESS_INVOICE_USE_CASE_TOKEN,
       useFactory: (
@@ -82,16 +92,16 @@ import type { LLMPort } from '../../application/ports/llm.port';
         'InvoiceRepository',
         STORAGE_TOKEN,
         OCR_TOKEN,
-        AUDIT_TOKEN,
+        JOBS_AUDIT_TOKEN,
         LLM_TOKEN,
         INVOICE_EVENT_REPOSITORY,
       ],
     },
-    // Worker — procesa jobs de la cola 'process-invoice'
+    // Worker — consumes jobs from the 'process-invoice' queue
     ProcessInvoiceWorker,
-    // Worker — lee outbox_events cada 10s y emite al EventEmitter
+    // Worker — polls outbox_events every 10 s and emits via EventEmitter
     OutboxPollerWorker,
-    // Handlers de eventos — escuchan al EventEmitter (no-op hasta FASE 11)
+    // Event handlers — wired with NotificationPort (no-op until FASE 11)
     InvoiceApprovedHandler,
     InvoiceRejectedHandler,
   ],
