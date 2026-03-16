@@ -1,5 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Produce a self-contained output directory (used by the Docker image)
+  output: 'standalone',
+
   // Security headers for all routes
   async headers() {
     return [
