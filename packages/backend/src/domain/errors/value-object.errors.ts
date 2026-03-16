@@ -35,11 +35,3 @@ export class InvalidTaxIdError extends DomainError {
     );
   }
 }
-
-export class InvalidProviderNameError extends DomainError {
-  readonly code = 'INVALID_PROVIDER_NAME';
-
-  constructor(reason: string) {
-    super(`Invalid provider name: ${reason}`);
-  }
-}

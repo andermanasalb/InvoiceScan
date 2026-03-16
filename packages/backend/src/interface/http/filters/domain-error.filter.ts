@@ -22,7 +22,6 @@ import type { DomainError } from '../../../domain/errors/domain.error';
 const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
   // 404
   INVOICE_NOT_FOUND: HttpStatus.NOT_FOUND,
-  PROVIDER_NOT_FOUND: HttpStatus.NOT_FOUND,
   USER_NOT_FOUND: HttpStatus.NOT_FOUND,
 
   // 401
@@ -35,7 +34,6 @@ const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
   // 409
   INVALID_STATE_TRANSITION: HttpStatus.CONFLICT,
   INVOICE_ALREADY_PROCESSING: HttpStatus.CONFLICT,
-  PROVIDER_ALREADY_EXISTS: HttpStatus.CONFLICT,
   USER_ALREADY_EXISTS: HttpStatus.CONFLICT,
 
   // 422
@@ -45,7 +43,6 @@ const DOMAIN_ERROR_STATUS_MAP: Record<string, number> = {
   INVALID_INVOICE_STATUS: HttpStatus.UNPROCESSABLE_ENTITY,
   INVALID_INVOICE_DATE: HttpStatus.UNPROCESSABLE_ENTITY,
   INVALID_TAX_ID: HttpStatus.UNPROCESSABLE_ENTITY,
-  INVALID_PROVIDER_NAME: HttpStatus.UNPROCESSABLE_ENTITY,
 };
 
 /**

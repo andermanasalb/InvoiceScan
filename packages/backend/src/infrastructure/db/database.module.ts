@@ -17,7 +17,6 @@ import {
 
 import {
   InvoiceTypeOrmRepository,
-  ProviderTypeOrmRepository,
   UserTypeOrmRepository,
   UserCredentialTypeOrmRepository,
   USER_CREDENTIAL_REPOSITORY,
@@ -71,7 +70,6 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
     // Bind domain interface tokens to their TypeORM implementations.
     // Use cases depend on the string token, never on the concrete class.
     { provide: 'InvoiceRepository', useClass: InvoiceTypeOrmRepository },
-    { provide: 'ProviderRepository', useClass: ProviderTypeOrmRepository },
     { provide: 'UserRepository', useClass: UserTypeOrmRepository },
     {
       provide: USER_CREDENTIAL_REPOSITORY,
@@ -97,7 +95,6 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
   ],
   exports: [
     'InvoiceRepository',
-    'ProviderRepository',
     'UserRepository',
     USER_CREDENTIAL_REPOSITORY,
     'AuditEventRepository',

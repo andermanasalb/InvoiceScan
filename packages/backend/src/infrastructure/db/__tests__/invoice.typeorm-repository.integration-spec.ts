@@ -6,12 +6,7 @@ import { UserOrmEntity } from '../entities/user.orm-entity';
 import { ProviderOrmEntity } from '../entities/provider.orm-entity';
 import { InvoiceTypeOrmRepository } from '../repositories/invoice.typeorm-repository';
 import { UserTypeOrmRepository } from '../repositories/user.typeorm-repository';
-import { ProviderTypeOrmRepository } from '../repositories/provider.typeorm-repository';
-import {
-  createInvoice,
-  createUser,
-  createProvider,
-} from '../../../domain/test/factories';
+import { createInvoice, createUser } from '../../../domain/test/factories';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 
 describe('InvoiceTypeOrmRepository (integration)', () => {
@@ -19,7 +14,6 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
   let ormRepo: Repository<InvoiceOrmEntity>;
   let repo: InvoiceTypeOrmRepository;
   let userRepo: UserTypeOrmRepository;
-  let providerRepo: ProviderTypeOrmRepository;
 
   // Shared user and provider for all tests (FK requirements)
   let uploaderId: string;
@@ -30,9 +24,6 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
     ormRepo = ds.getRepository(InvoiceOrmEntity);
     repo = new InvoiceTypeOrmRepository(ormRepo);
     userRepo = new UserTypeOrmRepository(ds.getRepository(UserOrmEntity));
-    providerRepo = new ProviderTypeOrmRepository(
-      ds.getRepository(ProviderOrmEntity),
-    );
   });
 
   afterAll(async () => {
@@ -42,11 +33,13 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
   beforeEach(async () => {
     await clearTables(ds);
 
-    // Every invoice needs a valid uploader (FK → users) and provider (FK → providers)
+    // Every invoice needs a valid uploader (FK -> users) and provider (FK -> providers)
     uploaderId = randomUUID();
     providerId = randomUUID();
     await userRepo.save(createUser({ id: uploaderId }));
-    await providerRepo.save(createProvider({ id: providerId }));
+    await ds
+      .getRepository(ProviderOrmEntity)
+      .save({ id: providerId, name: 'generic' });
   });
 
   // --- save ---
