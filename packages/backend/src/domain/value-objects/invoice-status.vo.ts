@@ -12,7 +12,7 @@ export const InvoiceStatusEnum = {
   REJECTED: 'REJECTED',
 } as const;
 
-type InvoiceStatusValue =
+export type InvoiceStatusValue =
   (typeof InvoiceStatusEnum)[keyof typeof InvoiceStatusEnum];
 
 const VALID_STATUSES = new Set<string>(Object.values(InvoiceStatusEnum));

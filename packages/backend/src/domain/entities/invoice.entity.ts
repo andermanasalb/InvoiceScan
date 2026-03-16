@@ -4,6 +4,7 @@ import {
   InvoiceDate,
   InvoiceStatus,
   InvoiceStatusEnum,
+  InvoiceStatusValue,
 } from '../value-objects';
 import { InvalidStateTransitionError } from '../errors';
 import { DomainError } from '../errors/domain.error';
@@ -217,7 +218,7 @@ export class Invoice {
     approverId: string,
     reason: string,
   ): Result<void, InvalidStateTransitionError> {
-    const allowedFrom = [
+    const allowedFrom: InvoiceStatusValue[] = [
       InvoiceStatusEnum.READY_FOR_APPROVAL,
       InvoiceStatusEnum.READY_FOR_VALIDATION,
     ];
