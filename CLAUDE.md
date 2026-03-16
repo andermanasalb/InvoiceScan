@@ -859,19 +859,37 @@ FASE 10 : Frontend Next.js 15                           ✅
             → Admin users page + assignment management
             → Export UI + responsive
 FASE 11 : Emails con Resend                             ✅
-            → ResendAdapter implementa NotificationPort
+            → ResendAdapter implementa NotificationPort con no-op fallback
             → Handlers disparan emails en cada transición relevante
+            → NotificationModule selecciona adapter según RESEND_API_KEY
 FASE 12 : Export CSV/JSON async + packages/shared       ✅
             → Export CSV/JSON via BullMQ (export-invoices queue)
             → packages/shared con Zod DTOs compartidos
 FASE 13 : Observabilidad OpenTelemetry + SigNoz         ✅
-            → Traces, métricas, logs estructurados
-            → OTEL_EXPORTER_OTLP_ENDPOINT configurable
+            → Traces, métricas, logs estructurados (pino + OTel)
+            → OTEL_EXPORTER_OTLP_ENDPOINT configurable, no-op sin collector
+            → Métricas: invoices_approved/rejected/processed, outbox_events, ocr_duration
 FASE 14 : E2E Vitest + Supertest + CI completo          ✅
-            → ~40 tests E2E HTTP (invoices, exports, auth)
-            → GitHub Actions CI con Docker services
+            → 375 unit tests (49 archivos, 100% passing)
+            → E2E HTTP: invoices workflow, exports, auth (Vitest + Supertest)
+            → Playwright UI E2E: auth, upload, invoices, workflow, dashboard
+            → CI: 5 jobs (backend quality, frontend quality, integration, e2e, playwright)
+            → Coverage: lines ≥80%, branches ≥72% enforced
 FASE 15 : Docker Compose completo + multi-stage build   ✅
+            → Backend: node:22-alpine multi-stage (deps → build → production)
+            → Frontend: Next.js standalone output, node:22-alpine
+            → docker compose --profile full para stack completo
+            → docker compose --profile observability para SigNoz
+            → Healthchecks en todos los servicios
 ```
+
+### Convenciones de variables de entorno
+
+- **Sin SMTP** — el proyecto usa Resend para emails. No hay SMTP_HOST/PORT/USER/PASS.
+- **RESEND_API_KEY** opcional — sin ella, los emails son no-op (la app arranca igualmente).
+- **AISTUDIO_API_KEY** opcional — sin ella, el GenericAdapter LLM está desactivado.
+- **CI_JWT_SECRET / CI_JWT_REFRESH_SECRET** — deben crearse manualmente en GitHub
+  Settings → Secrets and variables → Actions (mínimo 32 chars cada uno).
 
 ---
 

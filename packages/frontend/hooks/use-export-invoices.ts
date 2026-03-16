@@ -26,7 +26,7 @@ export type ExportJobStatus = 'pending' | 'processing' | 'done' | 'failed';
 export function useExportStatus(jobId: string | null) {
   return useQuery({
     queryKey: ['export-status', jobId],
-    queryFn: () => invoiceApi.getExportStatus(jobId!),
+    queryFn: () => invoiceApi.getExportStatus(jobId as string),
     enabled: !!jobId,
     refetchInterval: (query) => {
       const status = query.state.data?.data?.status;

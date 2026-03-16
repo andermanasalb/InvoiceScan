@@ -10,12 +10,11 @@ export const ConfigSchema = z.object({
   JWT_SECRET: z.string().min(32),
   JWT_REFRESH_SECRET: z.string().min(32),
   FRONTEND_URL: z.string().url(),
-  SMTP_HOST: z.string().default(''),
-  SMTP_PORT: z.coerce.number().default(587),
-  SMTP_USER: z.string().default(''),
-  SMTP_PASS: z.string().default(''),
   MAX_UPLOAD_SIZE_MB: z.coerce.number().default(10),
-  GOOGLE_VISION_API_KEY: z.string().optional(),
+  // Resend email provider (optional — emails are no-op when not set)
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_FROM_EMAIL: z.string().optional(),
+  // Google AI Studio LLM (optional — GenericAdapter is disabled without it)
   AISTUDIO_API_KEY: z.string().optional(),
   AISTUDIO_MODEL: z.string().optional(),
   // OpenTelemetry — optional, app starts normally without a collector

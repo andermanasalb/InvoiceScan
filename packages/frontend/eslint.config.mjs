@@ -71,11 +71,16 @@ export default tseslint.config(
   },
 
   {
-    // Ignore generated / build artefacts
+    // Ignore generated / build artefacts and Playwright E2E tests.
+    // E2E tests use their own tsconfig (e2e/tsconfig.json) with
+    // moduleResolution: node which is incompatible with the Next.js
+    // bundler-resolution tsconfig, so we exclude them from the
+    // type-aware linting pass entirely.
     ignores: [
       '.next/**',
       'node_modules/**',
       'out/**',
+      'e2e/**',
       '*.config.mjs',
       '*.config.js',
       'postcss.config.mjs',
