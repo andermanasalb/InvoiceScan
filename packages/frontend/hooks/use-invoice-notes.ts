@@ -7,6 +7,7 @@ export interface InvoiceNote {
   noteId: string;
   invoiceId: string;
   authorId: string;
+  authorEmail?: string | null;
   content: string;
   createdAt: string;
 }
