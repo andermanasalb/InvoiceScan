@@ -4,9 +4,13 @@ import { RefreshTokenInput, RefreshTokenOutput } from '../dtos';
 import { DomainError } from '../../domain/errors/domain.error';
 import { InvalidCredentialsError } from '../../domain/errors';
 
+/** TTL for refresh tokens: 7 days in seconds (must match login.use-case.ts) */
+const REFRESH_TOKEN_TTL = 7 * 24 * 60 * 60;
+
 export interface JwtVerifyPort {
   verifyRefreshToken(token: string): { sub: string } | null;
   signAccessToken(payload: { sub: string; role: string }): string;
+  signRefreshToken(payload: { sub: string }): string;
 }
 
 export interface UserRoleLoader {
@@ -29,9 +33,14 @@ export class RefreshTokenUseCase {
       return err(new InvalidCredentialsError());
     }
 
-    // 2. Check token is still in Redis (not revoked)
+    // 2. Check token is still in Redis (not revoked).
+    //    This also detects refresh token reuse: if the same token is presented
+    //    twice (e.g. after a previous rotation), the stored value will differ
+    //    and we reject immediately.
     const stored = await this.tokenStore.get(input.userId);
     if (stored !== input.refreshToken) {
+      // Potential token theft / reuse detected: revoke everything for this user.
+      await this.tokenStore.delete(input.userId);
       return err(new InvalidCredentialsError());
     }
 
@@ -39,12 +48,20 @@ export class RefreshTokenUseCase {
     const role = await this.roleLoader.getRoleByUserId(input.userId);
     if (!role) return err(new InvalidCredentialsError());
 
-    // 4. Issue new access token
+    // 4. Rotate the refresh token (issue a new one, invalidate the old one).
+    //    This limits the window of opportunity if a refresh token is stolen:
+    //    after the legitimate user refreshes, the stolen token is worthless.
+    const newRefreshToken = this.jwtVerifier.signRefreshToken({
+      sub: input.userId,
+    });
+    await this.tokenStore.set(input.userId, newRefreshToken, REFRESH_TOKEN_TTL);
+
+    // 5. Issue new access token
     const accessToken = this.jwtVerifier.signAccessToken({
       sub: input.userId,
       role,
     });
 
-    return ok({ accessToken });
+    return ok({ accessToken, refreshToken: newRefreshToken });
   }
 }

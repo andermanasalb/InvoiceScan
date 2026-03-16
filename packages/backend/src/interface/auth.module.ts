@@ -105,7 +105,16 @@ const JWT_SIGNER_VERIFIER = 'JWT_SIGNER_VERIFIER';
             jwt.sign(payload, refreshSecret, { expiresIn: '7d' }),
           verifyRefreshToken: (token) => {
             try {
-              return jwt.verify(token, refreshSecret) as { sub: string };
+              const decoded = jwt.verify(token, refreshSecret);
+              // Ensure decoded is an object with a sub string claim
+              if (
+                typeof decoded === 'object' &&
+                decoded !== null &&
+                typeof (decoded as { sub?: unknown }).sub === 'string'
+              ) {
+                return decoded as { sub: string };
+              }
+              return null;
             } catch {
               return null;
             }

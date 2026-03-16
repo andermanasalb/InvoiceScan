@@ -24,6 +24,8 @@ export type RefreshTokenInput = z.infer<typeof RefreshTokenInputSchema>;
 
 export interface RefreshTokenOutput {
   accessToken: string;
+  /** Rotated refresh token — must be stored in the HttpOnly cookie. */
+  refreshToken: string;
 }
 
 // ── Logout ────────────────────────────────────────────────────────────────────

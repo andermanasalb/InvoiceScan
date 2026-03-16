@@ -77,7 +77,8 @@ export class AuthController {
 
   /**
    * POST /api/v1/auth/refresh
-   * Reads refreshToken from HttpOnly cookie, issues new access token.
+   * Reads refreshToken from HttpOnly cookie, issues new access + refresh tokens.
+   * The refresh token is rotated on every use (old token is invalidated in Redis).
    * @Public() — must bypass the global JwtAuthGuard: this endpoint is called
    * precisely when the access token is missing or expired. The refresh token
    * in the HttpOnly cookie is the credential; RefreshTokenUseCase validates it.
@@ -85,7 +86,10 @@ export class AuthController {
   @Post('refresh')
   @Public()
   @HttpCode(HttpStatus.OK)
-  async refresh(@Req() req: Request) {
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const cookies = req.cookies as Record<string, string> | undefined;
     const refreshToken = cookies?.[REFRESH_COOKIE];
 
@@ -113,8 +117,13 @@ export class AuthController {
     });
 
     if (result.isErr()) {
+      // Clear the invalid cookie on failure to avoid retry loops
+      res.clearCookie(REFRESH_COOKIE, { path: '/' });
       throw new UnauthorizedException(result.error.message);
     }
+
+    // Set the rotated refresh token in the HttpOnly cookie
+    res.cookie(REFRESH_COOKIE, result.value.refreshToken, COOKIE_OPTIONS);
 
     return { data: { accessToken: result.value.accessToken } };
   }

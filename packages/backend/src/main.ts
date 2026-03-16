@@ -9,17 +9,47 @@ import { validateConfig } from './shared/config/config.schema';
 import { DomainErrorFilter } from './interface/http/filters/domain-error.filter';
 
 async function bootstrap() {
-  validateConfig();
+  const config = validateConfig();
   const app = await NestFactory.create(AppModule);
 
-  // ── Security HTTP headers ────────────────────────────────────────────────
-  app.use(helmet());
+  // ── Security HTTP headers ─────────────────────────────────────────────────
+  // Explicit CSP to prevent XSS even if the frontend accidentally injects
+  // unsafe content. script-src 'self' blocks inline scripts.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"], // inline styles needed by some clients
+          imgSrc: ["'self'", 'data:'],
+          connectSrc: ["'self'"],
+          fontSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          formAction: ["'self'"],
+          upgradeInsecureRequests: config.NODE_ENV === 'production' ? [] : null,
+        },
+      },
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+      noSniff: true,
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      crossOriginEmbedderPolicy: false, // keep disabled — API is consumed cross-origin
+    }),
+  );
 
-  // ── CORS — only allow the configured frontend origin ─────────────────────
+  // ── CORS — only allow the explicitly configured frontend origin ───────────
+  // No fallback to a hardcoded origin in production: if FRONTEND_URL is missing
+  // the app would have already exited in validateConfig() above.
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:5173',
+    origin: config.FRONTEND_URL,
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // ── Cookie parser (required for HttpOnly refresh token) ──────────────────
@@ -28,6 +58,6 @@ async function bootstrap() {
   // ── Global exception filter — maps DomainErrors to correct HTTP status ───
   app.useGlobalFilters(new DomainErrorFilter());
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(config.PORT);
 }
 void bootstrap();

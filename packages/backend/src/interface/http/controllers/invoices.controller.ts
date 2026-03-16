@@ -16,6 +16,7 @@ import {
   UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -149,10 +150,14 @@ export class InvoicesController {
    *
    * Returns 201 Created with the invoice id and its initial status.
    * The uploaderId is taken from the verified JWT.
+   *
+   * Rate limit: 20 uploads per hour per IP (matches CLAUDE.md security spec).
+   * Validators, approvers and admins skip this limit (only uploaders need it).
    */
   @Post('upload')
   @Roles('uploader', 'validator', 'approver', 'admin')
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ default: { limit: 20, ttl: 3600000 } })
   @UseInterceptors(
     FileInterceptor('file', {
       // Store in memory — we pass the Buffer directly to the use case.
