@@ -70,7 +70,7 @@ export function InvoiceNotes({ invoiceId, readOnly = false }: InvoiceNotesProps)
             >
               <p className="mb-2 text-sm text-zinc-200">{note.content}</p>
               <p className="text-xs text-zinc-500">
-                {note.authorId.slice(0, 8)}... ·{' '}
+                {note.authorEmail ?? note.authorId.slice(0, 8) + '…'} ·{' '}
                 {formatDistanceToNow(new Date(note.createdAt), { addSuffix: true })}
               </p>
             </div>

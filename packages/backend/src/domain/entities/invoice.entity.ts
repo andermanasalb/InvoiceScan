@@ -217,7 +217,11 @@ export class Invoice {
     approverId: string,
     reason: string,
   ): Result<void, InvalidStateTransitionError> {
-    if (this.status.getValue() !== InvoiceStatusEnum.READY_FOR_APPROVAL) {
+    const allowedFrom = [
+      InvoiceStatusEnum.READY_FOR_APPROVAL,
+      InvoiceStatusEnum.READY_FOR_VALIDATION,
+    ];
+    if (!allowedFrom.includes(this.status.getValue())) {
       return err(
         new InvalidStateTransitionError(
           this.status.getValue(),

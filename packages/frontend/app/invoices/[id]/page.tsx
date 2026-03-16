@@ -93,6 +93,7 @@ export default function InvoiceDetailPage() {
 
   const {
     canApprove,
+    canRejectFromValidation,
     canSendToValidation,
     canSendToApproval,
     canRetry,
@@ -354,7 +355,7 @@ export default function InvoiceDetailPage() {
                   </div>
                 )}
 
-                {/* Validator action: READY_FOR_VALIDATION → READY_FOR_APPROVAL */}
+                {/* Validator action: READY_FOR_VALIDATION → READY_FOR_APPROVAL (or Reject) */}
                 {canSendToApproval && (
                   <div className="mt-6 rounded-lg border border-violet-500/20 bg-violet-500/5 p-4">
                     <div className="mb-3 flex items-center gap-2 text-violet-400">
@@ -362,20 +363,33 @@ export default function InvoiceDetailPage() {
                       <span className="font-medium">Ready to Send for Approval</span>
                     </div>
                     <p className="mb-4 text-sm text-zinc-400">
-                      This invoice has been validated. You can add an optional note for the approver.
+                      This invoice has been validated. You can add an optional note for the approver, or reject it.
                     </p>
-                    <Button
-                      onClick={() => setSendToApprovalModalOpen(true)}
-                      disabled={sendToApprovalMutation.isPending}
-                      className="bg-violet-600 text-white hover:bg-violet-700"
-                    >
-                      {sendToApprovalMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="mr-2 h-4 w-4" />
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => setSendToApprovalModalOpen(true)}
+                        disabled={sendToApprovalMutation.isPending}
+                        className="bg-violet-600 text-white hover:bg-violet-700"
+                      >
+                        {sendToApprovalMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="mr-2 h-4 w-4" />
+                        )}
+                        Send to Approval
+                      </Button>
+                      {canRejectFromValidation && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setRejectModalOpen(true)}
+                          disabled={rejectMutation.isPending}
+                          className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                        >
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Reject
+                        </Button>
                       )}
-                      Send to Approval
-                    </Button>
+                    </div>
                   </div>
                 )}
 
@@ -423,9 +437,9 @@ export default function InvoiceDetailPage() {
                       <span className="font-medium">Rejected</span>
                     </div>
                     <p className="mb-2 text-sm text-rose-300">{invoice.rejectionReason}</p>
-                    {invoice.approverId && (
+                    {(invoice.approverEmail ?? invoice.approverId) && (
                       <p className="text-xs text-rose-400/70">
-                        Rejected by: {invoice.approverId.slice(0, 8)}...
+                        Rejected by: {invoice.approverEmail ?? invoice.approverId!.slice(0, 8) + '…'}
                       </p>
                     )}
                   </div>

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/api/v1/health)",
+      "Bash(curl -s -X POST http://localhost:3000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"\"email\"\":\"\"andermanas81@gmail.com\"\",\"\"password\"\":\"\"test\"\"}')"
+    ]
+  }
+}

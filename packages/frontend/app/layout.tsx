@@ -11,7 +11,7 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
-import { Toaster } from 'sonner'
+import { ToasterClient } from '@/components/toaster-client'
 import { Providers } from './providers'
 import './globals.css'
 
@@ -61,17 +61,7 @@ export default function RootLayout({
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased bg-[#09090B] text-zinc-50`}>
         <Providers>
           {children}
-          <Toaster 
-            theme="dark" 
-            position="bottom-right"
-            toastOptions={{
-              style: {
-                background: '#18181B',
-                border: '1px solid #27272A',
-                color: '#FAFAFA',
-              },
-            }}
-          />
+          <ToasterClient />
         </Providers>
         <Analytics />
       </body>

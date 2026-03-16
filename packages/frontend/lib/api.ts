@@ -69,7 +69,12 @@ api.interceptors.response.use(
     }
 
     // Handle 401 - Unauthorized
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Skip silent refresh for auth endpoints — a 401 there means bad credentials
+    // or no refresh token, not an expired access token. Retrying would deadlock.
+    const requestUrl = originalRequest.url ?? '';
+    const isAuthEndpoint = requestUrl.includes('/auth/login') || requestUrl.includes('/auth/refresh') || requestUrl.includes('/auth/logout');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         // Wait for refresh to complete
         return new Promise((resolve) => {
@@ -254,6 +259,10 @@ export const adminApi = {
   createUser: async (payload: { email: string; password: string; role: string }) => {
     const response = await api.post('/admin/users', payload);
     return response.data;
+  },
+
+  deleteUser: async (userId: string) => {
+    await api.delete(`/admin/users/${userId}`);
   },
 
   getAssignmentTree: async () => {

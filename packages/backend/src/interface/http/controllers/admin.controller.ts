@@ -25,6 +25,7 @@ import type { AssignUploaderUseCase } from '../../../application/use-cases/assig
 import type { AssignValidatorUseCase } from '../../../application/use-cases/assign-validator.use-case';
 import type { RemoveAssignmentUseCase } from '../../../application/use-cases/remove-assignment.use-case';
 import type { GetAssignmentTreeUseCase } from '../../../application/use-cases/get-assignment-tree.use-case';
+import type { DeleteUserUseCase } from '../../../application/use-cases/delete-user.use-case';
 
 // ── Injection tokens ──────────────────────────────────────────────────────────
 // CREATE_USER_USE_CASE_TOKEN is re-exported from auth.module — imported above.
@@ -34,6 +35,7 @@ export const ADMIN_ASSIGN_UPLOADER_TOKEN = 'ADMIN_ASSIGN_UPLOADER_USE_CASE';
 export const ADMIN_ASSIGN_VALIDATOR_TOKEN = 'ADMIN_ASSIGN_VALIDATOR_USE_CASE';
 export const ADMIN_REMOVE_ASSIGNMENT_TOKEN = 'ADMIN_REMOVE_ASSIGNMENT_USE_CASE';
 export const ADMIN_GET_TREE_TOKEN = 'ADMIN_GET_TREE_USE_CASE';
+export const ADMIN_DELETE_USER_TOKEN = 'ADMIN_DELETE_USER_USE_CASE';
 
 // ── Request body schemas ──────────────────────────────────────────────────────
 const CreateUserBodySchema = z.object({
@@ -81,6 +83,8 @@ export class AdminController {
     private readonly removeAssignmentUseCase: RemoveAssignmentUseCase,
     @Inject(ADMIN_GET_TREE_TOKEN)
     private readonly getAssignmentTreeUseCase: GetAssignmentTreeUseCase,
+    @Inject(ADMIN_DELETE_USER_TOKEN)
+    private readonly deleteUserUseCase: DeleteUserUseCase,
   ) {}
 
   /**
@@ -185,6 +189,24 @@ export class AdminController {
     });
     if (result.isErr()) throw result.error;
     return { data: null };
+  }
+
+  /**
+   * DELETE /api/v1/admin/users/:id
+   * Delete a user. Admins cannot delete themselves.
+   */
+  @Delete('users/:id')
+  @Roles('admin')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteUser(
+    @CurrentUser() admin: AuthenticatedUser,
+    @Param('id') userId: string,
+  ) {
+    const result = await this.deleteUserUseCase.execute({
+      userId,
+      requesterId: admin.userId,
+    });
+    if (result.isErr()) throw result.error;
   }
 
   /**

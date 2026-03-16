@@ -98,8 +98,10 @@ export function InvoiceTable({
               (userRole === 'uploader' && isOwner) ||
               (userRole !== 'uploader' && !isOwner)
             );
-            // Send-to-approval: approver/admin only, cannot be the validator who submitted
-            const canSendToApproval = roleCanSendToApproval && (isAdmin || (!isOwner && !isValidator));
+            // Send-to-approval: validator/approver/admin, cannot be the uploader
+            const canSendToApproval = roleCanSendToApproval && (isAdmin || !isOwner);
+            // Validator can also reject from READY_FOR_VALIDATION (not the uploader)
+            const canRejectFromValidation = userRole === 'validator' && !isOwner;
             const canApprove = roleCanApprove && (isAdmin || (!isOwner && !isValidator));
 
             return (
@@ -154,6 +156,18 @@ export function InvoiceTable({
                     >
                       <Send className="h-3.5 w-3.5" />
                       Send to Approval
+                    </Button>
+                  )}
+                  {canRejectFromValidation && invoice.status === 'READY_FOR_VALIDATION' && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onReject?.(invoice.invoiceId)}
+                      disabled={isApproving}
+                      className="h-8 gap-1 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      Reject
                     </Button>
                   )}
                   {canApprove && invoice.status === 'READY_FOR_APPROVAL' && (

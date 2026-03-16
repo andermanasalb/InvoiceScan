@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Check, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -22,6 +23,14 @@ import {
 import { Spinner } from '@/components/ui/spinner';
 import { useCreateUser } from '@/hooks/use-admin';
 
+const PASSWORD_RULES = [
+  { label: 'At least 8 characters',       test: (p: string) => p.length >= 8 },
+  { label: 'One uppercase letter (A–Z)',   test: (p: string) => /[A-Z]/.test(p) },
+  { label: 'One lowercase letter (a–z)',   test: (p: string) => /[a-z]/.test(p) },
+  { label: 'One number (0–9)',             test: (p: string) => /[0-9]/.test(p) },
+  { label: 'One special character (!@#…)', test: (p: string) => /[^A-Za-z0-9]/.test(p) },
+];
+
 interface CreateUserModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -32,6 +41,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('uploader');
   const createUser = useCreateUser();
+  const passwordValid = PASSWORD_RULES.every((r) => r.test(password));
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -86,13 +96,29 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
             <Input
               id="password"
               type="password"
-              placeholder="min. 8 characters"
+              placeholder="Create a strong password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              minLength={8}
               className="border-zinc-700 bg-zinc-800 text-zinc-100 placeholder:text-zinc-500 focus:border-indigo-500"
             />
+            {password.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {PASSWORD_RULES.map((rule) => {
+                  const ok = rule.test(password);
+                  return (
+                    <li key={rule.label} className="flex items-center gap-2 text-xs">
+                      {ok
+                        ? <Check className="h-3 w-3 text-emerald-400 shrink-0" />
+                        : <X className="h-3 w-3 text-zinc-500 shrink-0" />}
+                      <span className={ok ? 'text-emerald-400' : 'text-zinc-500'}>
+                        {rule.label}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -122,7 +148,7 @@ export function CreateUserModal({ open, onOpenChange }: CreateUserModalProps) {
             </Button>
             <Button
               type="submit"
-              disabled={createUser.isPending || !email || !password}
+              disabled={createUser.isPending || !email || !passwordValid}
               className="bg-indigo-600 text-white hover:bg-indigo-700"
             >
               {createUser.isPending ? (

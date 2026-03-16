@@ -13,6 +13,7 @@ export const InvoiceEventOutputSchema = z.object({
   from: z.string(),
   to: z.string(),
   userId: z.string(),
+  userEmail: z.string().nullable(),
   timestamp: z.date(),
 });
 export type InvoiceEventOutput = z.infer<typeof InvoiceEventOutputSchema>;

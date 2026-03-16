@@ -337,7 +337,7 @@ export class InvoicesController {
    * Requires a non-empty `reason` in the request body.
    */
   @Patch(':id/reject')
-  @Roles('approver', 'admin')
+  @Roles('validator', 'approver', 'admin')
   @HttpCode(HttpStatus.OK)
   async reject(
     @CurrentUser() user: AuthenticatedUser,
@@ -347,7 +347,7 @@ export class InvoicesController {
     const result = await this.rejectInvoiceUseCase.execute({
       invoiceId,
       approverId: user.userId,
-      approverRole: user.role as 'approver' | 'admin',
+      approverRole: user.role as 'validator' | 'approver' | 'admin',
       reason: body.reason,
     });
 
@@ -559,6 +559,7 @@ export class InvoicesController {
         noteId: note.id,
         invoiceId: note.invoiceId,
         authorId: note.authorId,
+        authorEmail: note.authorEmail,
         content: note.content,
         createdAt: note.createdAt,
       })),

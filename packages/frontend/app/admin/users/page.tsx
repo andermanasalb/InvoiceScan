@@ -1,14 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { UserPlus, Shield, CheckSquare, Upload, Users } from 'lucide-react';
+import { UserPlus, Shield, CheckSquare, Upload, Users, Trash2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { CreateUserModal } from '@/components/admin/create-user-modal';
-import { useAdminUsers } from '@/hooks/use-admin';
+import { useAdminUsers, useDeleteUser } from '@/hooks/use-admin';
+import { useAuth } from '@/context/auth-context';
 import { cn } from '@/lib/utils';
 
 const ROLE_CONFIG = {
@@ -21,6 +22,8 @@ const ROLE_CONFIG = {
 export default function AdminUsersPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const { data: users, isLoading } = useAdminUsers();
+  const { userId: currentUserId } = useAuth();
+  const deleteUser = useDeleteUser();
 
   const grouped = {
     admin:     users?.filter((u) => u.role === 'admin')     ?? [],
@@ -92,11 +95,13 @@ export default function AdminUsersPage() {
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-zinc-500">Email</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-zinc-500">Role</th>
                 <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-widest text-zinc-500">Created</th>
+                <th className="px-6 py-3" />
               </tr>
             </thead>
             <tbody>
               {users.map((user) => {
                 const cfg = ROLE_CONFIG[user.role] ?? ROLE_CONFIG.uploader;
+                const isSelf = user.userId === currentUserId;
                 return (
                   <tr
                     key={user.userId}
@@ -110,6 +115,18 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="px-6 py-4 text-sm text-zinc-500">
                       {format(new Date(user.createdAt), 'MMM d, yyyy')}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      {!isSelf && (
+                        <button
+                          onClick={() => deleteUser.mutate(user.userId)}
+                          disabled={deleteUser.isPending}
+                          className="text-zinc-600 hover:text-rose-400 transition-colors disabled:opacity-40"
+                          title="Delete user"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

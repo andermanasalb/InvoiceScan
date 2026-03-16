@@ -40,3 +40,7 @@ out/
 # Temp / test scripts
 gen_pdf.js
 test_invoice.pdf
+
+# Project docs (internal)
+CLAUDE.md
+EXPLANATION.md

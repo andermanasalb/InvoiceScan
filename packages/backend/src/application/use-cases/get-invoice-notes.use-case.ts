@@ -13,15 +13,20 @@ export interface GetInvoiceNotesInput {
   requesterRole: 'uploader' | 'validator' | 'approver' | 'admin';
 }
 
+export type InvoiceNoteWithEmail = InvoiceNote & { authorEmail: string | null };
+
 export class GetInvoiceNotesUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
     private readonly noteRepo: InvoiceNoteRepository,
+    private readonly findUserEmail: (
+      userId: string,
+    ) => Promise<string | null> = () => Promise.resolve(null),
   ) {}
 
   async execute(
     input: GetInvoiceNotesInput,
-  ): Promise<Result<InvoiceNote[], DomainError>> {
+  ): Promise<Result<InvoiceNoteWithEmail[], DomainError>> {
     const invoice = await this.invoiceRepo.findById(input.invoiceId);
     if (!invoice) return err(new InvoiceNotFoundError(input.invoiceId));
 
@@ -34,6 +39,12 @@ export class GetInvoiceNotesUseCase {
     }
 
     const notes = await this.noteRepo.findByInvoiceId(input.invoiceId);
-    return ok(notes);
+    const notesWithEmail = await Promise.all(
+      notes.map(async (note) => ({
+        ...note,
+        authorEmail: await this.findUserEmail(note.authorId),
+      })),
+    );
+    return ok(notesWithEmail);
   }
 }

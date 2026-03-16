@@ -25,9 +25,7 @@ import { InvoiceSentForApprovalEvent } from '../../domain/events/invoice-sent-fo
  * Allowed roles: approver, admin.
  * Ownership rules:
  *  1. The uploader of the invoice cannot trigger this action (except admin).
- *  2. The validator who moved it to READY_FOR_VALIDATION cannot also send it
- *     to approval — this enforces a two-person check (approver/admin who
- *     validated must not be the same as the one approving).
+ *     This prevents an uploader from bypassing the validation step entirely.
  */
 export class SendToApprovalUseCase {
   constructor(
@@ -47,15 +45,6 @@ export class SendToApprovalUseCase {
     if (
       input.validatorRole !== 'admin' &&
       input.validatorId === invoice.getUploaderId()
-    ) {
-      return err(new SelfActionNotAllowedError());
-    }
-
-    // Ownership check 2: whoever validated the invoice cannot also send it to approval
-    if (
-      input.validatorRole !== 'admin' &&
-      invoice.getValidatorId() !== null &&
-      input.validatorId === invoice.getValidatorId()
     ) {
       return err(new SelfActionNotAllowedError());
     }

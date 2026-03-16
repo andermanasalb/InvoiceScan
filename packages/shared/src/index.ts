@@ -89,6 +89,7 @@ export const InvoiceEventSchema = z.object({
   from: z.string(),
   to: z.string(),
   userId: z.string(),
+  userEmail: z.string().nullable().optional(),
   /** ISO datetime string */
   timestamp: z.string(),
 });
@@ -100,6 +101,7 @@ export const InvoiceNoteSchema = z.object({
   noteId: z.string(),
   invoiceId: z.string(),
   authorId: z.string(),
+  authorEmail: z.string().nullable().optional(),
   content: z.string(),
   /** ISO datetime string */
   createdAt: z.string(),

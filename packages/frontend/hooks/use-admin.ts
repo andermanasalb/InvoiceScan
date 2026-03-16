@@ -28,6 +28,23 @@ export function useAssignmentTree() {
   });
 }
 
+export function useDeleteUser() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (userId: string) => adminApi.deleteUser(userId),
+    onSuccess: () => {
+      toast.success('User deleted');
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['assignment-tree'] });
+    },
+    onError: (error: AxiosError<ApiError>) => {
+      toast.error(
+        error.response?.data?.error?.message ?? 'Failed to delete user',
+      );
+    },
+  });
+}
+
 export function useCreateUser() {
   const queryClient = useQueryClient();
   return useMutation({

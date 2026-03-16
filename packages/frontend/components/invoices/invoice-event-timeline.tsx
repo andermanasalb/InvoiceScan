@@ -67,9 +67,9 @@ export function InvoiceEventTimeline({ events }: InvoiceEventTimelineProps) {
                 {format(new Date(event.timestamp), "MMM d, yyyy 'at' HH:mm")}
               </div>
 
-              {/* User ID */}
+              {/* Actor */}
               <div className="text-xs text-zinc-600">
-                by User ID: {event.userId.slice(0, 8)}...
+                by {event.userEmail ?? event.userId.slice(0, 8) + '…'}
               </div>
             </div>
           </motion.div>

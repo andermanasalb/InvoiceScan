@@ -16,6 +16,9 @@ export class GetInvoiceEventsUseCase {
   constructor(
     private readonly invoiceRepo: InvoiceRepository,
     private readonly invoiceEventRepo: InvoiceEventRepository,
+    private readonly findUserEmail: (
+      userId: string,
+    ) => Promise<string | null> = () => Promise.resolve(null),
   ) {}
 
   async execute(
@@ -34,15 +37,18 @@ export class GetInvoiceEventsUseCase {
 
     const events = await this.invoiceEventRepo.findByInvoiceId(input.invoiceId);
 
-    return ok(
-      events.map((event) => ({
+    const eventsWithEmail = await Promise.all(
+      events.map(async (event) => ({
         id: event.getId(),
         invoiceId: event.getInvoiceId(),
         from: event.getFrom(),
         to: event.getTo(),
         userId: event.getUserId(),
+        userEmail: await this.findUserEmail(event.getUserId()),
         timestamp: event.getTimestamp(),
       })),
     );
+
+    return ok(eventsWithEmail);
   }
 }

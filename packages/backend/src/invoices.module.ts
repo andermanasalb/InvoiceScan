@@ -205,8 +205,17 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
       useFactory: (
         invoiceRepo: InvoiceRepository,
         invoiceEventRepo: InvoiceEventRepository,
-      ) => new GetInvoiceEventsUseCase(invoiceRepo, invoiceEventRepo),
-      inject: ['InvoiceRepository', INVOICE_EVENT_REPOSITORY],
+        userRepo: UserRepository,
+      ) =>
+        new GetInvoiceEventsUseCase(
+          invoiceRepo,
+          invoiceEventRepo,
+          async (userId: string) => {
+            const user = await userRepo.findById(userId);
+            return user?.getEmail() ?? null;
+          },
+        ),
+      inject: ['InvoiceRepository', INVOICE_EVENT_REPOSITORY, 'UserRepository'],
     },
 
     {
@@ -284,8 +293,17 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
       useFactory: (
         invoiceRepo: InvoiceRepository,
         noteRepo: InvoiceNoteRepository,
-      ) => new GetInvoiceNotesUseCase(invoiceRepo, noteRepo),
-      inject: ['InvoiceRepository', INVOICE_NOTE_REPOSITORY],
+        userRepo: UserRepository,
+      ) =>
+        new GetInvoiceNotesUseCase(
+          invoiceRepo,
+          noteRepo,
+          async (userId: string) => {
+            const user = await userRepo.findById(userId);
+            return user?.getEmail() ?? null;
+          },
+        ),
+      inject: ['InvoiceRepository', INVOICE_NOTE_REPOSITORY, 'UserRepository'],
     },
 
     {
