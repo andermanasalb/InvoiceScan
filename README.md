@@ -3573,4 +3573,589 @@ feat(fase13): UoW atomic TX + OpenTelemetry + PinoLogger migration
 
 ---
 
+### FASE 14 — Tests E2E + CI completo
+
+**¿Qué hicimos?**
+
+Completamos la pirámide de tests añadiendo la capa E2E (extremo a extremo). Hasta esta fase teníamos 344 tests unitarios y 36 de integración — todo testeado con mocks o contra la base de datos, pero nunca con el servidor HTTP real corriendo y procesando peticiones reales. En esta fase arrancamos la aplicación NestJS completa en memoria, la conectamos a PostgreSQL y Redis reales, y ejecutamos flujos completos del workflow de facturas vía HTTP.
+
+También extendimos el pipeline de CI con dos jobs nuevos que corren estos tests automáticamente en GitHub Actions.
+
+---
+
+#### Bloque 1 — Arquitectura de los tests E2E
+
+**¿Por qué E2E con Supertest en lugar de Playwright?**
+
+Playwright es ideal para tests de interfaz de usuario (navegador). Nuestros E2E cubren la **API REST**, no el frontend — lo más crítico para garantizar que el backend funciona correctamente de extremo a extremo. Supertest hace peticiones HTTP reales contra el servidor NestJS sin necesitar un navegador.
+
+La diferencia con los tests de integración de FASE 3 es que aquí:
+- La aplicación **completa** arranca (todos los módulos, guards, filtros, pipes, workers BullMQ).
+- Los tests se comunican vía **HTTP** igual que lo haría el frontend.
+- Los estados del workflow se transicionan mediante peticiones reales con JWT.
+
+**Configuración — `vitest-e2e.config.ts`:**
+
+```typescript
+// packages/backend/test/vitest-e2e.config.ts
+export default defineConfig({
+  test: {
+    globals: true,
+    include: ['test/**/*.e2e-spec.ts'],
+    fileParallelism: false,   // suites secuenciales — comparten estado de BD
+    testTimeout: 30_000,      // 30s por test — BullMQ workers necesitan tiempo
+    hookTimeout: 30_000,
+    globalSetup: ['test/setup/global-setup.ts'],
+  },
+});
+```
+
+- **`fileParallelism: false`**: las tres suites E2E corren secuencialmente porque comparten la misma base de datos. Si corriesen en paralelo, las inserciones de una suite interferirían con las assertions de otra.
+- **`testTimeout: 30_000`**: el worker BullMQ procesa el job de OCR+LLM de forma asíncrona. El test necesita tiempo para sondear el estado hasta que el worker termina.
+- **`globalSetup`**: antes de ejecutar ninguna spec, el helper de setup crea la conexión TypeORM y aplica todas las migraciones pendientes en la base de datos de test.
+
+---
+
+#### Bloque 2 — `global-setup.ts`: migraciones antes de todo
+
+```typescript
+// packages/backend/test/setup/global-setup.ts
+
+export async function setup(): Promise<void> {
+  const ds = new DataSource({
+    type: 'postgres',
+    url: process.env['DATABASE_URL'],
+    entities: [UserOrmEntity, InvoiceOrmEntity, /* ... todas las entidades */],
+    migrations: ['src/infrastructure/db/migrations/*.{ts,js}'],
+    synchronize: false,
+    logging: false,
+  });
+
+  await ds.initialize();
+  await ds.runMigrations();
+  await ds.destroy();
+}
+```
+
+Este archivo corre **una sola vez** antes de todas las specs, en un proceso separado de Vitest. Aplica las migraciones una vez y cierra la conexión — las specs individuales crean sus propias conexiones a través del módulo NestJS.
+
+**¿Por qué importar las entidades explícitamente en lugar de un glob?**
+
+`global-setup.ts` corre en el contexto de Vitest con SWC. TypeORM usaría `require()` dinámico para cargar un glob de archivos `.ts`, pero SWC solo transforma imports estáticos — el `require()` dinámico recibe archivos `.ts` crudos y falla. Importando las clases explícitamente, SWC las transpila correctamente antes de que TypeORM las use.
+
+---
+
+#### Bloque 3 — Los helpers de test E2E
+
+**`e2e-app.helper.ts` — arrancar la app con LLM stubbed:**
+
+```typescript
+// packages/backend/test/helpers/e2e-app.helper.ts
+
+export const stubLlmResult: LLMExtractionResult = {
+  total: 1210.0,
+  fecha: '2025-03-01',
+  numeroFactura: 'FACT-E2E-001',
+  nifEmisor: '12345678A',
+  nombreEmisor: 'Test Vendor S.L.',
+  baseImponible: 1000.0,
+  iva: 210.0,
+  ivaPorcentaje: 21,
+};
+
+export async function createE2EApp(): Promise<E2EApp> {
+  const moduleRef = await Test.createTestingModule({
+    imports: [AppModule],
+  })
+    .overrideProvider(LLM_TOKEN)   // ← sustituye el LLM real por el stub
+    .useValue(stubLlmAdapter)
+    .compile();
+
+  const app = moduleRef.createNestApplication();
+  app.use(cookieParser());                        // igual que main.ts
+  app.useGlobalFilters(new DomainErrorFilter());  // igual que main.ts
+
+  await app.init();
+  return { app, http: app.getHttpServer() };
+}
+```
+
+**¿Por qué sustituir el LLM?**
+
+`AIStudioAdapter` llama a Google AI Studio. En los tests E2E no queremos llamadas de red reales porque:
+- Son lentas (latencia de red).
+- Requieren `AISTUDIO_API_KEY` en CI.
+- Son no deterministas (el modelo puede cambiar su respuesta).
+
+`overrideProvider(LLM_TOKEN).useValue(stubLlmAdapter)` reemplaza el adaptador real por uno que siempre devuelve los mismos datos de prueba. **Todo lo demás es real**: PostgreSQL, Redis, BullMQ workers, guards JWT, filtros de error.
+
+Aplica también los mismos middlewares que `main.ts` (`cookieParser`, `DomainErrorFilter`) — si no, las cookies de refreshToken no funcionarían y los errores de dominio llegarían como 500 genéricos.
+
+**`db-e2e.helper.ts` — limpiar la BD entre suites:**
+
+```typescript
+export async function clearAllTables(app: INestApplication): Promise<void> {
+  const ds = app.get<DataSource>(getDataSourceToken());
+  // Las tablas se borran en orden inverso a las FK constraints
+  await ds.query(`TRUNCATE TABLE
+    uploader_validator_assignments, validator_approver_assignments,
+    outbox_events, audit_events, invoice_events, invoice_notes,
+    invoices, providers, user_credentials, users
+    RESTART IDENTITY CASCADE`);
+}
+```
+
+`TRUNCATE ... CASCADE` borra datos de todas las tablas relacionadas en una sola operación, respetando el orden de las claves foráneas. `RESTART IDENTITY` resetea los contadores de secuencia. Se llama en `beforeAll` y `afterAll` de cada spec para garantizar aislamiento total.
+
+**`seed-e2e.helper.ts` — usuarios y proveedor para tests:**
+
+Crea directamente en la base de datos (sin pasar por los use cases) 5 usuarios de test con sus credenciales y un proveedor genérico. Usa **bcrypt rounds=1** en lugar de los 12 de producción — el hashing lento de producción haría los tests insufriblemente lentos (12 bcrypt hashes a rounds=12 tardarían ~12 segundos solo en setup).
+
+**`auth-e2e.helper.ts` — hacer login y obtener token:**
+
+```typescript
+export async function loginAs(http, email, password): Promise<{ accessToken: string }> {
+  const res = await request(http)
+    .post('/api/v1/auth/login')
+    .send({ email, password })
+    .expect(200);
+  return { accessToken: res.body.data.accessToken };
+}
+```
+
+**`wait-for-status.helper.ts` — sondeo de estado asíncrono:**
+
+```typescript
+export async function waitForStatus(
+  http, token, invoiceId, expectedStatus,
+  maxAttempts = 20, intervalMs = 1000
+): Promise<InvoiceData> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await request(http)
+      .get(`/api/v1/invoices/${invoiceId}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    if (res.body.data?.status === expectedStatus) return res.body.data;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(`Invoice never reached status ${expectedStatus}`);
+}
+```
+
+El worker BullMQ procesa el job de OCR+LLM de forma asíncrona. El test no puede asumir cuándo terminará — hace polling cada segundo hasta que el estado esperado aparece, o falla después de 20 intentos (20 segundos).
+
+---
+
+#### Bloque 4 — Las tres suites E2E
+
+**`auth.e2e-spec.ts` — 14 tests de autenticación:**
+
+Flujos cubiertos:
+- `POST /auth/login` → 200 + accessToken en body + refreshToken en cookie HttpOnly
+- `POST /auth/login` con contraseña incorrecta → 401 (sin distinguir "usuario no encontrado" vs "contraseña incorrecta" — previene enumeración de usuarios)
+- `POST /auth/login` con email malformado → 400
+- `POST /auth/refresh` con cookie válida → nuevo accessToken diferente del original
+- `POST /auth/refresh` sin cookie → 401
+- `POST /auth/logout` → 204 + cookie limpiada
+- `GET /invoices` sin token → 401 (guard global)
+- `POST /admin/users` con token de uploader → 403 (rol insuficiente)
+- `GET /health` sin token → 200 (endpoint `@Public()`)
+
+**`invoices.e2e-spec.ts` — ~20 tests del workflow completo:**
+
+Flujo happy-path completo en 5 pasos encadenados:
+
+```
+upload → [BullMQ worker] → EXTRACTED → send-to-validation → READY_FOR_VALIDATION
+  → send-to-approval → READY_FOR_APPROVAL → approve → APPROVED
+```
+
+Cada paso es un `it()` separado que hereda el `invoiceId` del paso anterior. Después de cada transición, el test verifica el estado en la respuesta HTTP.
+
+Otros flujos cubiertos:
+- Flujo de rechazo: `READY_FOR_APPROVAL → REJECTED` con `{ reason }` obligatorio.
+- Transición inválida: aprobar una factura en `EXTRACTED` → 409 `INVALID_STATE_TRANSITION`.
+- Recurso inexistente: aprobar UUID inexistente → 404.
+- RBAC: uploaderB no puede ver facturas de uploaderA → 403.
+- RBAC: uploader no puede aprobar → 403.
+- Validator puede listar todas las facturas.
+- Upload sin `providerId` → 400. Sin archivo → 400. Con PNG en lugar de PDF → 400.
+- Notas: validator puede añadir, uploader no puede (403).
+
+**`exports.e2e-spec.ts` — 6 tests de exportación:**
+
+```
+POST /invoices/export?format=csv → 202 { jobId }
+  → [BullMQ ExportWorker en segundo plano]
+  → GET /exports/:jobId/status → polling hasta status='done'
+  → GET /exports/:jobId/download → archivo CSV con header 'invoiceId,status,...'
+```
+
+También cubre: export JSON (válido y parseable), uploader no puede exportar (403), jobId inexistente → 404.
+
+---
+
+#### Bloque 5 — CI: jobs `integration` y `e2e`
+
+Se añadieron dos jobs al pipeline de GitHub Actions:
+
+```
+quality → integration
+quality → e2e
+```
+
+Ambos jobs necesitan los secrets de GitHub:
+- `CI_JWT_SECRET` — mínimo 32 caracteres
+- `CI_JWT_REFRESH_SECRET` — mínimo 32 caracteres, diferente al anterior
+
+**¿Por qué estos secrets no están hardcodeados en el YAML?**
+
+El `JWT_SECRET` es lo que protege toda la autenticación. Si estuviese en el repositorio (aunque sea en un archivo de CI), cualquiera que lea el historial de Git podría fabricar tokens válidos para la instancia de CI. Los secrets de GitHub Actions se inyectan en variables de entorno sin aparecer en los logs ni en el código.
+
+Cada job levanta sus propios servicios Docker (Postgres + Redis) como contenedores de GitHub Actions, aplica migraciones mediante el `globalSetup`, y ejecuta los tests contra esos servicios.
+
+```yaml
+# Extracto del job e2e en .github/workflows/ci.yml
+services:
+  postgres:
+    image: postgres:16-alpine
+    env:
+      POSTGRES_DB: invoicescan_e2e
+    options: --health-cmd "pg_isready" --health-interval 10s
+
+  redis:
+    image: redis:7-alpine
+    options: --health-cmd "redis-cli ping" --health-interval 10s
+
+steps:
+  - name: Create uploads and exports directories
+    run: mkdir -p packages/backend/uploads packages/backend/exports
+
+  - name: Run E2E tests
+    run: pnpm --filter backend test:e2e
+```
+
+`mkdir -p uploads exports` es necesario porque los workers BullMQ escriben archivos en esos directorios. En desarrollo local existen porque están en `.gitignore` y se crean al primer uso. En CI son directorios efímeros que hay que crear explícitamente.
+
+---
+
+**Resumen de tests al cerrar FASE 14:**
+
+| Suite | Archivos | Tests aproximados |
+|---|---|---|
+| Unit (domain + use cases + infra) | 44 | 344 |
+| Integration (repositorios TypeORM reales) | 4 | 36 |
+| E2E (workflow completo vía HTTP) | 3 | ~40 |
+| **Total** | **51** | **~420** |
+
+**Commit de cierre:**
+```
+feat(fase14-15): E2E tests + CI integration/e2e jobs + Docker multi-stage
+```
+
+---
+
+### FASE 15 — Docker multi-stage + infraestructura de producción
+
+**¿Qué hicimos?**
+
+Empaquetamos la aplicación completa en imágenes Docker listas para producción. El objetivo: con `docker compose --profile full up`, levantar el stack completo (base de datos, migraciones, backend, frontend) sin instalar Node.js, pnpm ni nada en la máquina destino.
+
+Tres piezas principales:
+1. **Dockerfile del backend** — imagen ligera de producción con solo las dependencias necesarias.
+2. **Dockerfile del frontend** — imagen standalone de Next.js.
+3. **Perfil `full` en docker-compose.yml** — orquestación completa con orden de arranque.
+
+---
+
+#### Bloque 1 — Dockerfile del backend: 3 etapas
+
+```dockerfile
+# packages/backend/Dockerfile
+
+# ── Etapa 1: deps ─────────────────────────────────────────────────────────────
+FROM node:22-alpine AS deps
+RUN corepack enable && corepack prepare pnpm@latest --activate
+WORKDIR /app
+# Solo los manifests — para aprovechar la caché de Docker
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
+COPY packages/shared/package.json ./packages/shared/package.json
+COPY packages/backend/package.json ./packages/backend/package.json
+RUN pnpm install --frozen-lockfile   # instala TODO (incluyendo devDeps para build)
+
+# ── Etapa 2: build ────────────────────────────────────────────────────────────
+FROM deps AS build
+COPY packages/shared ./packages/shared
+COPY packages/backend ./packages/backend
+RUN pnpm --filter backend build     # compila TypeScript → dist/
+# pnpm deploy extrae SOLO las deps de producción en un directorio limpio
+RUN pnpm --filter backend deploy --prod /app/deploy
+RUN cp -r packages/backend/dist /app/deploy/dist
+
+# ── Etapa 3: production ───────────────────────────────────────────────────────
+FROM node:22-alpine AS production
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+WORKDIR /app
+COPY --from=build --chown=nestjs:nodejs /app/deploy ./
+RUN mkdir -p uploads exports && chown nestjs:nodejs uploads exports
+USER nestjs
+EXPOSE 3000
+CMD ["node", "dist/main.js"]
+```
+
+**¿Por qué 3 etapas?**
+
+El patrón multi-etapa es fundamental para producción. Cada etapa solo hereda el resultado de la anterior, no su contexto de build:
+
+| Etapa | Contiene | Tamaño aproximado |
+|---|---|---|
+| `deps` | todo `node_modules` (incluyendo devDeps) | ~800 MB |
+| `build` | código fuente + `dist/` compilado | ~850 MB |
+| `production` | solo `node_modules` de producción + `dist/` | ~200 MB |
+
+La imagen final no tiene TypeScript, Vitest, `@nestjs/cli`, ni ninguna herramienta de desarrollo. Menos código = menor superficie de ataque.
+
+**`pnpm deploy --prod`**
+
+El comando `pnpm --filter backend deploy --prod /app/deploy` crea un directorio `/app/deploy` que contiene exactamente lo que el backend necesita en runtime:
+- Solo las dependencias de `dependencies` (no `devDependencies`).
+- El `package.json` del paquete.
+- Los symlinks del workspace resueltos (el paquete `shared` se copia directamente).
+
+Esta es la forma oficial de pnpm para empaquetar un paquete de un workspace para producción.
+
+**Usuario no-root:**
+
+```dockerfile
+RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
+USER nestjs
+```
+
+Ejecutar el proceso como usuario root en un contenedor Docker es un riesgo de seguridad — si hay una vulnerabilidad en la aplicación que permite escapar del contenedor, el atacante tendría privilegios de root en el host. El usuario `nestjs` (uid 1001) solo tiene permisos sobre el directorio de la aplicación.
+
+**HEALTHCHECK:**
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3000/api/v1/health || exit 1
+```
+
+Docker sondea el endpoint `/health` cada 30 segundos. Si falla 3 veces consecutivas, el contenedor se marca como `unhealthy`. Docker Compose usa este estado para determinar si el servicio está listo antes de arrancar los dependientes.
+
+---
+
+#### Bloque 2 — `run-migrations.ts`: migraciones sin ts-node en producción
+
+```typescript
+// packages/backend/src/run-migrations.ts
+
+async function runMigrations(): Promise<void> {
+  const ds = new DataSource({
+    type: 'postgres',
+    url: process.env['DATABASE_URL'],
+    entities: [join(__dirname, 'infrastructure/db/entities/*.orm-entity.js')],
+    migrations: [join(__dirname, 'infrastructure/db/migrations/*.js')],
+    synchronize: false,
+  });
+
+  await ds.initialize();
+  const ran = await ds.runMigrations({ transaction: 'each' });
+  console.log(`Applied ${ran.length} migration(s).`);
+  await ds.destroy();
+  process.exit(0);
+}
+```
+
+En desarrollo, las migraciones se ejecutan con el CLI de TypeORM vía `ts-node`:
+```bash
+pnpm --filter backend migration:run
+# → typeorm-ts-node-commonjs migration:run -d data-source.ts
+```
+
+En producción dentro de Docker, no hay `ts-node` — solo el JavaScript compilado en `dist/`. Este script se compila junto con el resto del backend (`nest build` lo incluye porque está en `src/`) y se ejecuta simplemente como:
+
+```bash
+node dist/run-migrations.js
+```
+
+Las entidades y migraciones se cargan desde el directorio `dist/` mediante globs de `.js` — los archivos compilados.
+
+---
+
+#### Bloque 3 — Dockerfile del frontend: Next.js standalone
+
+```dockerfile
+# packages/frontend/Dockerfile
+
+# ── Etapa 1: deps ─────────────────────────────────────────────────────────────
+FROM node:22-alpine AS deps
+# ... instala deps del workspace
+
+# ── Etapa 2: build ────────────────────────────────────────────────────────────
+FROM deps AS build
+COPY packages/shared ./packages/shared
+COPY packages/frontend ./packages/frontend
+ARG NEXT_PUBLIC_API_URL=http://localhost:3000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN pnpm --filter @invoice-flow/frontend build
+
+# ── Etapa 3: production ───────────────────────────────────────────────────────
+FROM node:22-alpine AS production
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+WORKDIR /app
+# Solo el output standalone — sin node_modules ni código fuente
+COPY --from=build --chown=nextjs:nodejs /app/packages/frontend/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/packages/frontend/.next/static ./packages/frontend/.next/static
+COPY --from=build --chown=nextjs:nodejs /app/packages/frontend/public ./packages/frontend/public
+USER nextjs
+EXPOSE 3001
+CMD ["node", "packages/frontend/server.js"]
+```
+
+**`output: 'standalone'` en `next.config.mjs`:**
+
+Next.js por defecto genera una carpeta `.next/` que requiere tener todo `node_modules` instalado para funcionar. Con `output: 'standalone'`, Next.js genera una carpeta `.next/standalone/` que contiene el servidor Node.js y solo las dependencias estrictamente necesarias para ejecutarlo — sin `node_modules` completos.
+
+```javascript
+// packages/frontend/next.config.mjs
+const nextConfig = {
+  output: 'standalone',
+  // ...
+};
+```
+
+El resultado es que la imagen de producción del frontend pesa ~80 MB en lugar de ~500 MB.
+
+**`NEXT_PUBLIC_API_URL` como build arg:**
+
+```dockerfile
+ARG NEXT_PUBLIC_API_URL=http://localhost:3000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+```
+
+Las variables `NEXT_PUBLIC_*` de Next.js se incrustan en el bundle del cliente en **tiempo de build** (no en tiempo de ejecución). Por eso deben pasarse como `ARG` al build del Dockerfile. Para cambiar la URL de la API en producción:
+
+```bash
+docker compose --profile full build \
+  --build-arg NEXT_PUBLIC_API_URL=https://api.tu-dominio.com
+```
+
+---
+
+#### Bloque 4 — Perfil `full` en docker-compose.yml
+
+```yaml
+services:
+  # postgres y redis existen desde FASE 0 (sin perfil — siempre activos)
+
+  migrate:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+      target: build    # usa la etapa 'build' (tiene el dist/ compilado)
+    command: sh -c "node packages/backend/dist/run-migrations.js"
+    depends_on:
+      postgres:
+        condition: service_healthy   # espera a que Postgres esté listo
+
+  app:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: packages/backend/Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully  # espera a que migrate termine OK
+    env_file: .env
+    volumes:
+      - uploads:/app/uploads
+      - exports:/app/exports
+
+  frontend:
+    profiles: [full]
+    build:
+      context: .
+      dockerfile: packages/frontend/Dockerfile
+    ports:
+      - "3001:3001"
+    depends_on:
+      - app
+```
+
+**Orden de arranque garantizado:**
+
+```
+postgres (healthy) ─┬─→ migrate (completed_successfully) ─→ app (healthy) ─→ frontend
+redis    (healthy) ─┘
+```
+
+`condition: service_completed_successfully` significa que Docker Compose espera a que el contenedor `migrate` termine con código de salida 0 antes de arrancar `app`. Si las migraciones fallan, `app` nunca arranca — lo que es el comportamiento correcto (la app no debe correr sin el schema de base de datos).
+
+**Volúmenes para datos persistentes:**
+
+```yaml
+volumes:
+  uploads:   # PDFs subidos por los usuarios
+  exports:   # CSVs/JSONs generados por el ExportWorker
+```
+
+Sin estos volúmenes, cada `docker compose down` perdería todos los PDFs y exports. Los volúmenes Docker persisten los datos entre reinicios del contenedor.
+
+**Comandos de uso:**
+
+```bash
+# Construir las imágenes (necesario la primera vez y tras cambios de código)
+docker compose --profile full build
+
+# Levantar todo el stack (base de datos + migraciones + backend + frontend)
+docker compose --profile full up
+
+# Solo infraestructura (para desarrollo local con pnpm)
+docker compose up -d    # solo postgres + redis
+
+# Observabilidad (SigNoz)
+docker compose --profile observability up -d
+```
+
+---
+
+#### Problemas encontrados y cómo se resolvieron
+
+**1. `run-migrations.ts` necesitaba incluirse en el build de NestJS**
+
+El archivo vive en `src/run-migrations.ts`. El `nest build` usa `tsconfig.build.json` que excluye `test/**/*` pero incluye todo lo demás en `src/`. El archivo se compila correctamente a `dist/run-migrations.js` con el resto del backend.
+
+**2. El `migrate` service necesita el `dist/` disponible**
+
+El servicio `migrate` en docker-compose.yml usa `target: build` para reutilizar la etapa intermedia del Dockerfile que ya tiene el código compilado, en lugar de construir una tercera imagen separada solo para migraciones.
+
+**3. Directorio `exports/` no existía al arrancar el `ExportWorker`**
+
+El worker intenta escribir `exports/<jobId>.csv`. Si el directorio no existe, falla con `ENOENT`. El Dockerfile del backend incluye `RUN mkdir -p uploads exports` para crear ambos directorios al construir la imagen.
+
+---
+
+**Variables de entorno necesarias para el perfil `full`:**
+
+Todas las variables del `.env` más:
+
+```
+PORT=3000                              # puerto del backend en el host
+NEXT_PUBLIC_API_URL=http://localhost:3000  # URL de la API para el frontend
+```
+
+**Commit de cierre:**
+```
+feat(fase14-15): E2E tests + CI integration/e2e jobs + Docker multi-stage
+```
+
+---
+
 *Este README se actualiza al cerrar cada fase.*
