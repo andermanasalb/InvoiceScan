@@ -68,3 +68,55 @@ export async function seedPlaywrightUsers(
     }
   }
 }
+
+/**
+ * Seed the full assignment chain for Playwright test users:
+ *   pw-uploader → pw-validator → pw-approver
+ *
+ * Idempotent: 409 Conflict means assignment already exists, skip.
+ */
+export async function seedPlaywrightAssignments(
+  adminToken: string,
+): Promise<void> {
+  const headers = { Authorization: `Bearer ${adminToken}` };
+
+  // Fetch user IDs by role
+  const usersRes = await axios.get<{
+    data: Array<{ id: string; email: string; role: string }>;
+  }>(`${BACKEND_URL}/admin/users`, { headers });
+  const users = usersRes.data.data;
+
+  const uploader = users.find((u) => u.email === PLAYWRIGHT_USERS.uploader.email);
+  const validator = users.find((u) => u.email === PLAYWRIGHT_USERS.validator.email);
+  const approver = users.find((u) => u.email === PLAYWRIGHT_USERS.approver.email);
+
+  if (!uploader || !validator || !approver) {
+    throw new Error('[seed] Could not find all Playwright users to create assignments');
+  }
+
+  // uploader → validator
+  try {
+    await axios.post(
+      `${BACKEND_URL}/admin/assignments/uploaders`,
+      { uploaderId: uploader.id, validatorId: validator.id },
+      { headers },
+    );
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 409) {
+      // already assigned
+    } else throw err;
+  }
+
+  // validator → approver
+  try {
+    await axios.post(
+      `${BACKEND_URL}/admin/assignments/validators`,
+      { validatorId: validator.id, approverId: approver.id },
+      { headers },
+    );
+  } catch (err) {
+    if (axios.isAxiosError(err) && err.response?.status === 409) {
+      // already assigned
+    } else throw err;
+  }
+}

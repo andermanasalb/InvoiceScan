@@ -20,7 +20,7 @@
 
 import axios from 'axios';
 import { apiLogin } from './auth.helper';
-import { seedPlaywrightUsers } from './seed.helper';
+import { seedPlaywrightUsers, seedPlaywrightAssignments } from './seed.helper';
 
 const BACKEND_URL = process.env.BACKEND_URL ?? 'http://localhost:3000';
 const FRONTEND_URL = process.env.FRONTEND_URL ?? 'http://localhost:3001';
@@ -62,6 +62,9 @@ export default async function globalSetup(): Promise<void> {
 
   // 4. Seed all Playwright-specific test users (idempotent — skips 409s)
   await seedPlaywrightUsers(accessToken);
+
+  // 5. Seed assignment chain: uploader → validator → approver (idempotent)
+  await seedPlaywrightAssignments(accessToken);
 
   console.log('[global-setup] Done — Playwright users are ready');
 }
