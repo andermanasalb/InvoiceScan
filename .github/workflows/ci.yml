@@ -258,6 +258,9 @@ jobs:
       JWT_REFRESH_SECRET: ${{ secrets.CI_JWT_REFRESH_SECRET }}
       FRONTEND_URL: http://localhost:3001
       PORT: 3000
+      # All Supertest requests share the same loopback IP, so the 5/min
+      # production limit is exhausted immediately. Raise it for E2E.
+      LOGIN_RATE_LIMIT: '100'
 
     steps:
       - name: Checkout code
