@@ -44,3 +44,9 @@ test_invoice.pdf
 # Project docs (internal)
 CLAUDE.md
 EXPLANATION.md
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Exported invoice files (may contain sensitive data)
+exports/
