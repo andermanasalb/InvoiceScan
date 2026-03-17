@@ -14,7 +14,8 @@ import {
   OCR_TOKEN,
 } from '../../infrastructure/ocr/pdf-parse.adapter';
 import { AIStudioAdapter } from '../../infrastructure/llm/ai-studio.adapter';
-import { LLM_TOKEN } from '../../application/ports/llm.port';
+import { LLM_TOKEN, type LLMPort, type LLMExtractionResult } from '../../application/ports/llm.port';
+import { ok } from 'neverthrow';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository';
 import { InvoiceApprovedHandler } from '../../infrastructure/events/handlers/invoice-approved.handler';
 import { InvoiceRejectedHandler } from '../../infrastructure/events/handlers/invoice-rejected.handler';
@@ -66,10 +67,26 @@ const JOBS_AUDIT_TOKEN = AUDIT_PORT_TOKEN;
         new AuditAdapter(auditRepo),
       inject: ['AuditEventRepository'],
     },
-    // LLM adapter — reads API key and model from ConfigService
+    // LLM adapter — reads API key and model from ConfigService.
+    // When AISTUDIO_STUB=true the factory returns a deterministic stub so
+    // Playwright / CI environments without an AI Studio key can still drive
+    // invoices to EXTRACTED status without hitting the real LLM API.
     {
       provide: LLM_TOKEN,
-      useFactory: (config: ConfigService) => {
+      useFactory: (config: ConfigService): LLMPort => {
+        if (config.get<string>('AISTUDIO_STUB') === 'true') {
+          const stub: LLMExtractionResult = {
+            total: 1210.0,
+            fecha: '2025-03-01',
+            numeroFactura: 'FACT-STUB-001',
+            nifEmisor: '12345678A',
+            nombreEmisor: 'Test Vendor S.L.',
+            baseImponible: 1000.0,
+            iva: 210.0,
+            ivaPorcentaje: 21,
+          };
+          return { extractInvoiceData: () => Promise.resolve(ok(stub)) };
+        }
         const apiKey = config.get<string>('AISTUDIO_API_KEY') ?? '';
         const model =
           config.get<string>('AISTUDIO_MODEL') ?? 'gemini-1.5-flash';

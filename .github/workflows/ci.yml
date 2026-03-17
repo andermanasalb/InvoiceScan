@@ -346,6 +346,9 @@ jobs:
       # Playwright runs many tests that each need a login; raise the cap so
       # the test suite does not hit the 5-per-minute production limit.
       LOGIN_RATE_LIMIT: '100'
+      # Use the deterministic LLM stub so invoices reach EXTRACTED status
+      # without a real AISTUDIO_API_KEY. Workflow tests depend on this.
+      AISTUDIO_STUB: 'true'
 
     steps:
       - name: Checkout code

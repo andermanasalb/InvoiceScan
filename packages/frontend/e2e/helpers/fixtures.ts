@@ -29,18 +29,23 @@ type AuthFixtures = {
   uploaderPage: Page;
 };
 
+// Backend base URL — the refresh cookie must be registered for the backend
+// origin so Chromium sends it when axios POSTs to /auth/refresh.
+// SameSite=Lax cookies are NOT reliably sent in cross-port AJAX requests
+// (localhost:3001 → localhost:3000) in Chromium; anchoring the cookie to the
+// backend origin (localhost:3000) ensures it is treated as same-origin.
+const BACKEND_ORIGIN = process.env.BACKEND_URL ?? 'http://localhost:3000';
+
 async function buildAuthPage(
   page: Page,
   userKey: keyof typeof PLAYWRIGHT_USERS,
 ): Promise<Page> {
   // Fresh login per test — each Playwright test gets a fresh browser context,
-  // so the previous refresh token (issued in another test's context) has already
-  // been rotated by the backend and is no longer valid. Re-logging in guarantees
-  // a brand-new refresh token for this context. LOGIN_RATE_LIMIT=100 in CI gives
-  // enough headroom for the full test suite.
+  // so the previous refresh token has already been rotated and is no longer
+  // valid. Re-logging in gives a brand-new refresh token for this context.
   const user = PLAYWRIGHT_USERS[userKey];
   const loginResult = await apiLogin(user.email, user.password);
-  await setRefreshCookie(page.context(), loginResult.cookie);
+  await setRefreshCookie(page.context(), loginResult.cookie, BACKEND_ORIGIN);
   await injectAuth(page, loginResult);
   return page;
 }
