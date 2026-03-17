@@ -70,7 +70,7 @@ function getInitialState(): AuthStateWithInit {
   // Playwright test injection: addInitScript sets __pw_access_token before
   // any page scripts run so we can inject the token directly, bypassing the
   // silent-refresh flow that depends on the refresh cookie.
-  const win = window as Record<string, unknown>;
+  const win = window as unknown as Record<string, unknown>;
   const pwToken = typeof win['__pw_access_token'] === 'string'
     ? (win['__pw_access_token'] as string)
     : null;
