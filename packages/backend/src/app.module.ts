@@ -108,7 +108,9 @@ const bullBoardModules =
       connection: {
         host: redisUrl.hostname,
         port: Number(redisUrl.port) || 6379,
-        ...(redisUrl.password && { password: decodeURIComponent(redisUrl.password) }),
+        ...(redisUrl.password && {
+          password: decodeURIComponent(redisUrl.password),
+        }),
         ...(redisUrl.username && { username: redisUrl.username }),
       },
     }),
