@@ -1,5 +1,6 @@
 # ─── Stage 1: deps ────────────────────────────────────────────────────────────
 # Install ALL workspace dependencies (including devDeps needed for the build).
+# build: 2
 FROM node:22-alpine AS deps
 
 # Enable corepack to use pnpm
