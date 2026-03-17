@@ -58,7 +58,7 @@ async function bootstrap() {
   // ── Global exception filter — maps DomainErrors to correct HTTP status ───
   app.useGlobalFilters(new DomainErrorFilter());
 
-  await app.listen(config.PORT);
+  await app.listen(config.PORT, '0.0.0.0');
 }
 bootstrap().catch((err: unknown) => {
   console.error('[bootstrap] Fatal error during startup:', err);
