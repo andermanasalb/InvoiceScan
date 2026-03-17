@@ -59,7 +59,9 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: Number(process.env.LOGIN_RATE_LIMIT ?? '5'), ttl: 60000 } })
+  @Throttle({
+    default: { limit: Number(process.env.LOGIN_RATE_LIMIT ?? '5'), ttl: 60000 },
+  })
   async login(
     @Body(new ZodValidationPipe(LoginInputSchema)) body: LoginInput,
     @Res({ passthrough: true }) res: Response,
