@@ -37,6 +37,10 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
       useFactory: () => ({
         type: 'postgres' as const,
         url: process.env.DATABASE_URL,
+        ssl:
+          process.env.NODE_ENV === 'production'
+            ? { rejectUnauthorized: false }
+            : false,
         entities: [
           UserOrmEntity,
           UserCredentialOrmEntity,
