@@ -18,12 +18,13 @@
 import { ok, err, Result } from 'neverthrow';
 import { randomUUID } from 'crypto';
 import { InvoiceRepository } from '../../domain/repositories';
+import { AssignmentRepository } from '../../domain/repositories/assignment.repository';
 import { StoragePort, AuditPort, InvoiceQueuePort } from '../ports';
 import { UploadInvoiceInput, UploadInvoiceOutput } from '../dtos';
 import { Invoice } from '../../domain/entities';
 import { InvoiceAmount, InvoiceDate } from '../../domain/value-objects';
 import { DomainError } from '../../domain/errors/domain.error';
-import { InvalidFieldError } from '../../domain/errors';
+import { InvalidFieldError, NotAssignedError } from '../../domain/errors';
 
 export class UploadInvoiceUseCase {
   constructor(
@@ -31,6 +32,7 @@ export class UploadInvoiceUseCase {
     private readonly storage: StoragePort,
     private readonly auditor: AuditPort,
     private readonly queue: InvoiceQueuePort,
+    private readonly assignmentRepo: AssignmentRepository,
   ) {}
 
   async execute(
@@ -40,6 +42,19 @@ export class UploadInvoiceUseCase {
       return err(
         new InvalidFieldError('providerId', 'Provider ID cannot be empty'),
       );
+    }
+
+    // Assignment check: uploaders must have a full chain (validator + approver).
+    // Admins are exempt — they can always upload.
+    if (input.uploaderRole === 'uploader') {
+      const validatorId = await this.assignmentRepo.getAssignedValidatorForUploader(input.uploaderId);
+      if (!validatorId) {
+        return err(new NotAssignedError('You are not assigned to a validator. Ask an admin to assign you before uploading.'));
+      }
+      const approverId = await this.assignmentRepo.getAssignedApproverForValidator(validatorId);
+      if (!approverId) {
+        return err(new NotAssignedError('Your assigned validator has no approver. Ask an admin to complete the assignment chain.'));
+      }
     }
 
     // Placeholder: amount y date se actualizan tras el OCR (worker process-invoice)

@@ -61,3 +61,11 @@ export class SelfActionNotAllowedError extends DomainError {
     super('You cannot perform this action on your own invoice');
   }
 }
+
+export class NotAssignedError extends DomainError {
+  readonly code = 'NOT_ASSIGNED';
+
+  constructor(reason: string) {
+    super(reason);
+  }
+}

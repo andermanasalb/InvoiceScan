@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const RejectInvoiceInputSchema = z.object({
   invoiceId: z.string().uuid(),
   approverId: z.string().uuid(),
-  approverRole: z.enum(['validator', 'approver', 'admin']),
+  approverRole: z.enum(['uploader', 'validator', 'approver', 'admin']),
   reason: z.string().min(1, { message: 'Rejection reason cannot be empty' }),
 });
 export type RejectInvoiceInput = z.infer<typeof RejectInvoiceInputSchema>;

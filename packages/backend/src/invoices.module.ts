@@ -150,12 +150,14 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
         storage: StoragePort,
         auditor: AuditPort,
         queue: InvoiceQueuePort,
-      ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor, queue),
+        assignmentRepo: AssignmentRepository,
+      ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor, queue, assignmentRepo),
       inject: [
         'InvoiceRepository',
         STORAGE_TOKEN,
         AUDIT_PORT_TOKEN,
         InvoiceQueueService,
+        ASSIGNMENT_REPOSITORY,
       ],
     },
 
@@ -225,18 +227,21 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
         auditor: AuditPort,
         invoiceEventRepo: InvoiceEventRepository,
         eventBus: EventBusPort,
+        assignmentRepo: AssignmentRepository,
       ) =>
         new SendToApprovalUseCase(
           invoiceRepo,
           auditor,
           invoiceEventRepo,
           eventBus,
+          assignmentRepo,
         ),
       inject: [
         'InvoiceRepository',
         AUDIT_PORT_TOKEN,
         INVOICE_EVENT_REPOSITORY,
         EVENT_BUS_TOKEN,
+        ASSIGNMENT_REPOSITORY,
       ],
     },
 

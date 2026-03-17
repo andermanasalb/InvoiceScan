@@ -219,8 +219,9 @@ export class Invoice {
     reason: string,
   ): Result<void, InvalidStateTransitionError> {
     const allowedFrom: InvoiceStatusValue[] = [
-      InvoiceStatusEnum.READY_FOR_APPROVAL,
+      InvoiceStatusEnum.EXTRACTED,
       InvoiceStatusEnum.READY_FOR_VALIDATION,
+      InvoiceStatusEnum.READY_FOR_APPROVAL,
     ];
     if (!allowedFrom.includes(this.status.getValue())) {
       return err(

@@ -18,7 +18,9 @@ interface UseInvoicePermissionsParams {
 export interface InvoicePermissions {
   /** User can approve or reject the invoice (approver/admin from READY_FOR_APPROVAL). */
   canApprove: boolean;
-  /** Validator can reject from READY_FOR_VALIDATION. */
+  /** Uploader (owner) or admin can reject from EXTRACTED. */
+  canRejectAtExtracted: boolean;
+  /** Validator/approver/admin can reject from READY_FOR_VALIDATION. */
   canRejectFromValidation: boolean;
   /** User can move EXTRACTED → READY_FOR_VALIDATION. */
   canSendToValidation: boolean;
@@ -66,11 +68,16 @@ export function useInvoicePermissions({
     invoice?.status === 'READY_FOR_VALIDATION' &&
     (isAdmin || !isOwner);
 
-  // Validator can reject from READY_FOR_VALIDATION (not the uploader)
+  // Uploader (owner) or admin can reject from EXTRACTED (cancellation)
+  const canRejectAtExtracted =
+    invoice?.status === 'EXTRACTED' &&
+    (isAdmin || (role === 'uploader' && isOwner));
+
+  // Validator/approver/admin can reject from READY_FOR_VALIDATION
   const canRejectFromValidation =
-    role === 'validator' &&
+    (role === 'validator' || role === 'approver' || isAdmin) &&
     invoice?.status === 'READY_FOR_VALIDATION' &&
-    !isOwner;
+    (isAdmin || !isOwner);
 
   const canRetry =
     (role === 'validator' || role === 'approver' || role === 'admin') &&
@@ -79,5 +86,5 @@ export function useInvoicePermissions({
   const canAddNote =
     role === 'validator' || role === 'approver' || role === 'admin';
 
-  return { canApprove, canRejectFromValidation, canSendToValidation, canSendToApproval, canRetry, canAddNote };
+  return { canApprove, canRejectAtExtracted, canRejectFromValidation, canSendToValidation, canSendToApproval, canRetry, canAddNote };
 }

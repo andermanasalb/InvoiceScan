@@ -181,6 +181,7 @@ export class InvoicesController {
 
     const result = await this.uploadInvoiceUseCase.execute({
       uploaderId: user.userId,
+      uploaderRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
       providerId: parsed.data.providerId,
       fileBuffer: file.buffer,
       mimeType: file.mimetype as 'application/pdf',
@@ -337,7 +338,7 @@ export class InvoicesController {
    * Requires a non-empty `reason` in the request body.
    */
   @Patch(':id/reject')
-  @Roles('validator', 'approver', 'admin')
+  @Roles('uploader', 'validator', 'approver', 'admin')
   @HttpCode(HttpStatus.OK)
   async reject(
     @CurrentUser() user: AuthenticatedUser,
@@ -347,7 +348,7 @@ export class InvoicesController {
     const result = await this.rejectInvoiceUseCase.execute({
       invoiceId,
       approverId: user.userId,
-      approverRole: user.role as 'validator' | 'approver' | 'admin',
+      approverRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
       reason: body.reason,
     });
 

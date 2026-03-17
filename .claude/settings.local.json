@@ -13,7 +13,10 @@
       "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" log --oneline -6)",
       "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" status -b --short)",
       "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" log origin/main..HEAD --oneline)",
-      "Bash(pnpm --filter backend typecheck)"
+      "Bash(pnpm --filter backend typecheck)",
+      "Bash(grep -rn \"role\\\\|userId\\\\|user\" 'c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan/packages/frontend/contexts' --include=*.tsx --include=*.ts -l)",
+      "Bash(grep -rn \"AuthContext\\\\|useAuth\" 'c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan/packages/frontend' --include=*.tsx --include=*.ts -l)",
+      "Bash(pnpm --filter frontend typecheck)"
     ]
   }
 }

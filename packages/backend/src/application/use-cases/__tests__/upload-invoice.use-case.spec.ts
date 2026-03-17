@@ -6,11 +6,13 @@ import { AuditPort } from '../../ports';
 import { UploadInvoiceInput } from '../../dtos';
 import { InvoiceStatusEnum } from '../../../domain/value-objects';
 import type { InvoiceQueuePort } from '../../../application/ports/invoice-queue.port';
+import type { AssignmentRepository } from '../../../domain/repositories/assignment.repository';
 
 const makeInput = (
   overrides?: Partial<UploadInvoiceInput>,
 ): UploadInvoiceInput => ({
   uploaderId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+  uploaderRole: 'admin',
   providerId: 'b2c3d4e5-f6a7-8901-bcde-f12345678901',
   fileBuffer: Buffer.from('fake-pdf'),
   mimeType: 'application/pdf',
@@ -23,6 +25,7 @@ describe('UploadInvoiceUseCase', () => {
   let mockStorage: StoragePort;
   let mockAudit: AuditPort;
   let mockQueue: InvoiceQueuePort;
+  let mockAssignmentRepo: AssignmentRepository;
   let useCase: UploadInvoiceUseCase;
 
   beforeEach(() => {
@@ -59,11 +62,24 @@ describe('UploadInvoiceUseCase', () => {
       enqueueRetry: vi.fn().mockResolvedValue(undefined),
     };
 
+    mockAssignmentRepo = {
+      assignUploaderToValidator: vi.fn(),
+      assignValidatorToApprover: vi.fn(),
+      removeUploaderAssignment: vi.fn(),
+      removeValidatorAssignment: vi.fn(),
+      getAssignedUploaderIds: vi.fn(),
+      getAssignedValidatorIds: vi.fn(),
+      getAssignedValidatorForUploader: vi.fn().mockResolvedValue('validator-id'),
+      getAssignedApproverForValidator: vi.fn().mockResolvedValue('approver-id'),
+      getFullTree: vi.fn(),
+    };
+
     useCase = new UploadInvoiceUseCase(
       mockRepo,
       mockStorage,
       mockAudit,
       mockQueue,
+      mockAssignmentRepo,
     );
   });
 

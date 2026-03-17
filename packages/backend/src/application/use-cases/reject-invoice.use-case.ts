@@ -46,15 +46,19 @@ export class RejectInvoiceUseCase {
             return err(new InvoiceNotFoundError(input.invoiceId));
           }
 
-          // Ownership check: non-admins cannot act on their own invoices
-          if (
+          // Ownership check:
+          // - Uploaders can only reject their OWN invoices (cancellation).
+          // - Other non-admins (validator/approver) cannot act on invoices they uploaded.
+          if (input.approverRole === 'uploader') {
+            if (input.approverId !== invoice.getUploaderId()) {
+              span.setStatus({ code: SpanStatusCode.ERROR, message: 'Self action not allowed' });
+              return err(new SelfActionNotAllowedError());
+            }
+          } else if (
             input.approverRole !== 'admin' &&
             input.approverId === invoice.getUploaderId()
           ) {
-            span.setStatus({
-              code: SpanStatusCode.ERROR,
-              message: 'Self action not allowed',
-            });
+            span.setStatus({ code: SpanStatusCode.ERROR, message: 'Self action not allowed' });
             return err(new SelfActionNotAllowedError());
           }
 

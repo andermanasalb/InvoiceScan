@@ -93,6 +93,7 @@ export default function InvoiceDetailPage() {
 
   const {
     canApprove,
+    canRejectAtExtracted,
     canRejectFromValidation,
     canSendToValidation,
     canSendToApproval,
@@ -340,18 +341,31 @@ export default function InvoiceDetailPage() {
                     <p className="mb-4 text-sm text-zinc-400">
                       This invoice has been extracted. Review the data above and send it for validation.
                     </p>
-                    <Button
-                      onClick={() => sendToValidationMutation.mutate(invoiceId)}
-                      disabled={sendToValidationMutation.isPending}
-                      className="bg-cyan-600 text-white hover:bg-cyan-700"
-                    >
-                      {sendToValidationMutation.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Send className="mr-2 h-4 w-4" />
+                    <div className="flex gap-3">
+                      <Button
+                        onClick={() => sendToValidationMutation.mutate(invoiceId)}
+                        disabled={sendToValidationMutation.isPending}
+                        className="bg-cyan-600 text-white hover:bg-cyan-700"
+                      >
+                        {sendToValidationMutation.isPending ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Send className="mr-2 h-4 w-4" />
+                        )}
+                        Send to Validation
+                      </Button>
+                      {canRejectAtExtracted && (
+                        <Button
+                          variant="outline"
+                          onClick={() => setRejectModalOpen(true)}
+                          disabled={rejectMutation.isPending}
+                          className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 hover:text-rose-300"
+                        >
+                          <XCircle className="mr-2 h-4 w-4" />
+                          Reject
+                        </Button>
                       )}
-                      Send to Validation
-                    </Button>
+                    </div>
                   </div>
                 )}
 

@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 export const UploadInvoiceInputSchema = z.object({
   uploaderId: z.string().uuid(),
+  uploaderRole: z.enum(['uploader', 'validator', 'approver', 'admin']),
   providerId: z.string().uuid(),
   fileBuffer: z.instanceof(Buffer),
   mimeType: z.string().refine((v) => v === 'application/pdf', {

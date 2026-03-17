@@ -8,22 +8,43 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useDropzone } from 'react-dropzone';
-import { Upload, FileText, X, Check, Download } from 'lucide-react';
+import { Upload, FileText, X, Check, Download, AlertTriangle } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import { useUploadInvoice } from '@/hooks/use-invoice-mutations';
 import { generateSampleInvoice } from '@/lib/generate-sample-invoice';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/context/auth-context';
+import { useQuery } from '@tanstack/react-query';
+import { adminApi } from '@/lib/api';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 
 export default function UploadPage() {
+  const { role, userId } = useAuth();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
   const uploadMutation = useUploadInvoice();
+
+  // For uploaders: check that a full assignment chain exists (uploader→validator→approver)
+  const { data: assignmentTree } = useQuery({
+    queryKey: ['assignment-tree'],
+    queryFn: () => adminApi.getAssignmentTree(),
+    enabled: role === 'uploader',
+  });
+
+  const assignmentBlocked = role === 'uploader' && assignmentTree !== undefined && (() => {
+    const tree = (assignmentTree as { data?: { approvers?: { validators?: { uploaderIds?: string[] }[] }[] } }).data;
+    const uploaderFound = tree?.approvers?.some((approver) =>
+      approver.validators?.some((validator) =>
+        validator.uploaderIds?.includes(userId ?? '')
+      )
+    );
+    return !uploaderFound;
+  })();
 
   const onDrop = useCallback((acceptedFiles: File[], rejectedFiles: unknown[]) => {
     setFileError(null);
@@ -89,7 +110,7 @@ export default function UploadPage() {
     }
   };
 
-  const isDisabled = !selectedFile || uploadMutation.isPending;
+  const isDisabled = !selectedFile || uploadMutation.isPending || !!assignmentBlocked;
 
   const buttonLabel = uploadMutation.isPending
     ? 'Uploading...'
@@ -100,6 +121,23 @@ export default function UploadPage() {
   return (
     <AppShell title="Upload Invoice">
       <div className="mx-auto max-w-2xl space-y-6">
+
+        {/* Assignment warning for unassigned uploaders */}
+        {assignmentBlocked && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-5 py-4"
+          >
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+            <div>
+              <p className="font-medium text-amber-300">You are not assigned to a validator</p>
+              <p className="mt-1 text-sm text-amber-400/80">
+                An admin must assign you to a validator (and that validator to an approver) before you can upload invoices. Contact your administrator.
+              </p>
+            </div>
+          </motion.div>
+        )}
 
         {/* Sample invoice download */}
         <motion.div
