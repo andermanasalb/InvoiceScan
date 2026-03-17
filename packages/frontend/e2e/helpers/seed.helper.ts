@@ -82,7 +82,7 @@ export async function seedPlaywrightAssignments(
 
   // Fetch user IDs by role
   const usersRes = await axios.get<{
-    data: Array<{ id: string; email: string; role: string }>;
+    data: Array<{ userId: string; email: string; role: string }>;
   }>(`${BACKEND_URL}/admin/users`, { headers });
   const users = usersRes.data.data;
 
@@ -98,7 +98,7 @@ export async function seedPlaywrightAssignments(
   try {
     await axios.post(
       `${BACKEND_URL}/admin/assignments/uploaders`,
-      { uploaderId: uploader.id, validatorId: validator.id },
+      { uploaderId: uploader.userId, validatorId: validator.userId },
       { headers },
     );
   } catch (err) {
@@ -111,7 +111,7 @@ export async function seedPlaywrightAssignments(
   try {
     await axios.post(
       `${BACKEND_URL}/admin/assignments/validators`,
-      { validatorId: validator.id, approverId: approver.id },
+      { validatorId: validator.userId, approverId: approver.userId },
       { headers },
     );
   } catch (err) {
