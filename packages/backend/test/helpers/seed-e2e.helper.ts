@@ -103,6 +103,23 @@ export async function seedE2EData(
     [TEST_PROVIDER_ID, 'Generic (E2E)', 'generic', now],
   );
 
+  // Assignments: uploader→validator, uploaderB→validator, validator→approver
+  // Required so the upload enforcement check passes in E2E tests
+  const [adminUser, approverUser, validatorUser, uploaderUser, uploaderBUser] =
+    users as typeof users;
+  await ds.query(
+    `INSERT INTO uploader_validator_assignments (id, uploader_id, validator_id, created_by, created_at) VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), uploaderUser.id, validatorUser.id, adminUser.id, now],
+  );
+  await ds.query(
+    `INSERT INTO uploader_validator_assignments (id, uploader_id, validator_id, created_by, created_at) VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), uploaderBUser.id, validatorUser.id, adminUser.id, now],
+  );
+  await ds.query(
+    `INSERT INTO validator_approver_assignments (id, validator_id, approver_id, created_by, created_at) VALUES ($1, $2, $3, $4, $5)`,
+    [randomUUID(), validatorUser.id, approverUser.id, adminUser.id, now],
+  );
+
   const [admin, approver, validator, uploader, uploaderB] = users as [
     (typeof users)[0],
     (typeof users)[0],

@@ -38,7 +38,8 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
         type: 'postgres' as const,
         url: process.env.DATABASE_URL,
         ssl:
-          process.env.NODE_ENV === 'production'
+          process.env.NODE_ENV === 'production' &&
+          process.env.DATABASE_SSL !== 'false'
             ? { rejectUnauthorized: false }
             : false,
         entities: [

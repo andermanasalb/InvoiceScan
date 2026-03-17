@@ -334,6 +334,7 @@ jobs:
     env:
       NODE_ENV: production
       DATABASE_URL: postgresql://user:pass@localhost:5432/invoicescan_playwright
+      DATABASE_SSL: 'false'
       REDIS_URL: redis://localhost:6379
       JWT_SECRET: ${{ secrets.CI_JWT_SECRET }}
       JWT_REFRESH_SECRET: ${{ secrets.CI_JWT_REFRESH_SECRET }}
