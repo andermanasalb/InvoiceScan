@@ -107,8 +107,6 @@ describe('Auth E2E', () => {
         .expect(200);
 
       const cookie = (loginRes.headers['set-cookie'] as string[])[0];
-      const originalToken = (loginRes.body as { data: { accessToken: string } })
-        .data.accessToken;
 
       // Refresh
       const refreshRes = await request(e2e.http)
@@ -120,8 +118,12 @@ describe('Auth E2E', () => {
         .data.accessToken;
 
       expect(newToken).toBeTruthy();
-      // New token is different from the original (different iat)
-      expect(newToken).not.toBe(originalToken);
+      // The refresh token cookie must be rotated (new Set-Cookie issued)
+      const newCookie = (refreshRes.headers['set-cookie'] as string[])[0];
+      expect(newCookie).toBeDefined();
+      expect(newCookie).toContain('refreshToken=');
+      // Note: access token bytes may be identical when both are issued within
+      // the same second (same iat), which is normal JWT behaviour in fast CI.
     });
 
     it('should return 401 when called without a refresh cookie', async () => {

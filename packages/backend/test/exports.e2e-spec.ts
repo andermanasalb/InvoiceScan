@@ -126,7 +126,7 @@ describe('Exports E2E', () => {
       await waitForExport(e2e.http, approverToken, jobId);
 
       const downloadRes = await request(e2e.http)
-        .get(`/api/v1/exports/${jobId}/download`)
+        .get(`/api/v1/exports/${jobId}/download?ext=json`)
         .set('Authorization', `Bearer ${approverToken}`)
         .expect(200);
 
