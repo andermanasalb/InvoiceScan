@@ -9,7 +9,9 @@ import { validateConfig } from './shared/config/config.schema';
 import { DomainErrorFilter } from './interface/http/filters/domain-error.filter';
 
 async function bootstrap() {
+  process.stdout.write('[bootstrap] Starting...\n');
   const config = validateConfig();
+  process.stdout.write('[bootstrap] Config validated.\n');
   const app = await NestFactory.create(AppModule);
 
   // ── Security HTTP headers ─────────────────────────────────────────────────
