@@ -103,7 +103,7 @@ export async function injectAuth(
   );
 
   // Navigate to the actual target page
-  await page.goto(targetPath, { waitUntil: 'networkidle' });
+  await page.goto(targetPath, { waitUntil: 'load' });
 }
 
 /**

@@ -15,7 +15,7 @@ import { test, expect } from './helpers/fixtures';
 test.describe('Dashboard — uploader', () => {
   test('renders the dashboard with stats cards', async ({ uploaderPage: page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // The dashboard should have at least one stat card visible
     // We look for common heading text rendered on the page
@@ -24,7 +24,7 @@ test.describe('Dashboard — uploader', () => {
 
   test('does NOT show admin nav links', async ({ uploaderPage: page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.getByRole('link', { name: /users/i })).not.toBeVisible();
     await expect(page.getByRole('link', { name: /assignments/i })).not.toBeVisible();
@@ -50,7 +50,7 @@ test.describe('Dashboard — uploader', () => {
 test.describe('Dashboard — admin', () => {
   test('shows admin nav links (Users and Assignments)', async ({ adminPage: page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.getByRole('link', { name: /users/i })).toBeVisible();
     await expect(page.getByRole('link', { name: /assignments/i })).toBeVisible();
@@ -66,14 +66,14 @@ test.describe('Dashboard — admin', () => {
 test.describe('Dashboard — approver', () => {
   test('dashboard renders without errors', async ({ approverPage: page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.getByRole('heading', { name: /dashboard/i })).toBeVisible();
   });
 
   test('does NOT show admin links', async ({ approverPage: page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     await expect(page.getByRole('link', { name: /assignments/i })).not.toBeVisible();
   });
