@@ -69,15 +69,12 @@ const JWT_SIGNER_VERIFIER = 'JWT_SIGNER_VERIFIER';
     // ── Redis client — URL read via ConfigService, not module-level constant ─
     {
       provide: REDIS_CLIENT,
-      useFactory: (config: ConfigService) => {
-        const url = new URL(
-          config.get<string>('REDIS_URL') ?? 'redis://localhost:6379',
-        );
-        return new Redis({
-          host: url.hostname,
-          port: Number(url.port) || 6379,
-        });
-      },
+      useFactory: (config: ConfigService) =>
+        new Redis(config.get<string>('REDIS_URL') ?? 'redis://localhost:6379', {
+          family: 0,
+          maxRetriesPerRequest: null,
+          enableReadyCheck: false,
+        }),
       inject: [ConfigService],
     },
 
