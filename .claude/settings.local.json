@@ -3,7 +3,16 @@
     "allow": [
       "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/api/v1/health)",
       "Bash(curl -s -X POST http://localhost:3000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"\"email\"\":\"\"andermanas81@gmail.com\"\",\"\"password\"\":\"\"test\"\"}')",
-      "Bash(pnpm --filter backend lint)"
+      "Bash(pnpm --filter backend lint)",
+      "Bash(find 'c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan/packages/frontend/src' -name *.ts -o -name *.tsx)",
+      "Bash(find 'c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan/packages/frontend/lib' -name *.ts)",
+      "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" log --oneline -5)",
+      "Bash(xargs grep:*)",
+      "Bash(find 'c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan/packages/backend/src' -name *.ts)",
+      "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" status --short)",
+      "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" log --oneline -6)",
+      "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" status -b --short)",
+      "Bash(git -C \"c:/Users/MSI/Desktop/Proyectos Github/InvoiceScan\" log origin/main..HEAD --oneline)"
     ]
   }
 }
