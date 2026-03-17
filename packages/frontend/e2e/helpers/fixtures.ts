@@ -19,7 +19,7 @@
  */
 
 import { test as base, type Page } from '@playwright/test';
-import { apiLogin, injectAuth, setRefreshCookie } from './auth.helper';
+import { apiLogin, injectAuth, setRefreshCookie, type LoginResult } from './auth.helper';
 import { PLAYWRIGHT_USERS } from './seed.helper';
 
 type AuthFixtures = {
@@ -29,12 +29,26 @@ type AuthFixtures = {
   uploaderPage: Page;
 };
 
+// Module-level cache — persists for the lifetime of the worker process.
+// Since Playwright runs with workers: 1, each role is logged in at most once
+// per test run, avoiding repeated logins that exhaust the rate limit.
+const _loginCache = new Map<string, LoginResult>();
+
+async function getCachedLogin(
+  userKey: keyof typeof PLAYWRIGHT_USERS,
+): Promise<LoginResult> {
+  if (!_loginCache.has(userKey)) {
+    const user = PLAYWRIGHT_USERS[userKey];
+    _loginCache.set(userKey, await apiLogin(user.email, user.password));
+  }
+  return _loginCache.get(userKey)!;
+}
+
 async function buildAuthPage(
   page: Page,
   userKey: keyof typeof PLAYWRIGHT_USERS,
 ): Promise<Page> {
-  const user = PLAYWRIGHT_USERS[userKey];
-  const loginResult = await apiLogin(user.email, user.password);
+  const loginResult = await getCachedLogin(userKey);
   await setRefreshCookie(page.context(), loginResult.cookie);
   await injectAuth(page, loginResult);
   return page;

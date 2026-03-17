@@ -340,6 +340,9 @@ jobs:
       # BACKEND_URL used by Playwright global-setup to call the API directly
       # (without /api/v1 — the helper appends that path itself)
       BACKEND_URL: http://localhost:3000
+      # Playwright runs many tests that each need a login; raise the cap so
+      # the test suite does not hit the 5-per-minute production limit.
+      LOGIN_RATE_LIMIT: '100'
 
     steps:
       - name: Checkout code

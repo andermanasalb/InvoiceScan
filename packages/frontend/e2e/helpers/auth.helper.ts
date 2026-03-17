@@ -130,12 +130,11 @@ export async function setRefreshCookie(
     {
       name,
       value,
-      domain: 'localhost',
+      url: frontendOrigin,
       path: '/',
       httpOnly: true,
       secure: false,
       sameSite: 'Lax',
-      url: frontendOrigin,
     },
   ]);
 }

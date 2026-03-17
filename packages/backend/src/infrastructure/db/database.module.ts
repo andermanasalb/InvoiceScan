@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { join } from 'path';
 
 import {
   UserOrmEntity,
@@ -39,13 +38,16 @@ import { INVOICE_NOTE_REPOSITORY } from '../../domain/repositories/invoice-note.
         type: 'postgres' as const,
         url: process.env.DATABASE_URL,
         entities: [
-          join(
-            __dirname,
-            '../../infrastructure/db/entities/*.orm-entity.{ts,js}',
-          ),
-        ],
-        migrations: [
-          join(__dirname, '../../infrastructure/db/migrations/*.{ts,js}'),
+          UserOrmEntity,
+          UserCredentialOrmEntity,
+          ProviderOrmEntity,
+          InvoiceOrmEntity,
+          InvoiceEventOrmEntity,
+          AuditEventOrmEntity,
+          OutboxEventOrmEntity,
+          InvoiceNoteOrmEntity,
+          UploaderValidatorAssignmentOrmEntity,
+          ValidatorApproverAssignmentOrmEntity,
         ],
         synchronize: false,
         migrationsRun: false,

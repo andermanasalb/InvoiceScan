@@ -39,7 +39,7 @@ describe('InvoiceTypeOrmRepository (integration)', () => {
     await userRepo.save(createUser({ id: uploaderId }));
     await ds
       .getRepository(ProviderOrmEntity)
-      .save({ id: providerId, name: 'generic' });
+      .save({ id: providerId, name: 'generic', adapterType: 'generic' });
   });
 
   // --- save ---

@@ -48,7 +48,7 @@ export class AuthController {
 
   /**
    * POST /api/v1/auth/login
-   * Rate-limited to 5 requests per minute per IP.
+   * Rate-limited to LOGIN_RATE_LIMIT requests per minute per IP (default: 5).
    * Returns: { data: { accessToken, userId, role } }
    * Side effect: sets HttpOnly refreshToken cookie.
    *
@@ -59,7 +59,7 @@ export class AuthController {
   @Post('login')
   @Public()
   @HttpCode(HttpStatus.OK)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle({ default: { limit: Number(process.env.LOGIN_RATE_LIMIT ?? '5'), ttl: 60000 } })
   async login(
     @Body(new ZodValidationPipe(LoginInputSchema)) body: LoginInput,
     @Res({ passthrough: true }) res: Response,
