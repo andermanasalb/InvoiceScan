@@ -57,7 +57,7 @@ export async function seedPlaywrightUsers(
   for (const user of Object.values(PLAYWRIGHT_USERS)) {
     try {
       await axios.post(
-        `${BACKEND_URL}/users`,
+        `${BACKEND_URL}/admin/users`,
         { email: user.email, password: user.password, role: user.role },
         { headers },
       );

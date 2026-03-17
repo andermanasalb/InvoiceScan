@@ -23,6 +23,18 @@ import { OutboxEventOrmEntity } from '../../src/infrastructure/db/entities/outbo
 import { InvoiceNoteOrmEntity } from '../../src/infrastructure/db/entities/invoice-note.orm-entity';
 import { UploaderValidatorAssignmentOrmEntity } from '../../src/infrastructure/db/entities/uploader-validator-assignment.orm-entity';
 import { ValidatorApproverAssignmentOrmEntity } from '../../src/infrastructure/db/entities/validator-approver-assignment.orm-entity';
+// Import migration classes directly — glob strings cause TypeORM to use require() which
+// fails in Vitest's ESM context (same reason entities are imported directly above).
+import { CreateUsersTable1741650001000 } from '../../src/infrastructure/db/migrations/1741650001000-CreateUsersTable';
+import { CreateUserCredentialsTable1741650002000 } from '../../src/infrastructure/db/migrations/1741650002000-CreateUserCredentialsTable';
+import { CreateProvidersTable1741650003000 } from '../../src/infrastructure/db/migrations/1741650003000-CreateProvidersTable';
+import { CreateInvoicesTable1741650004000 } from '../../src/infrastructure/db/migrations/1741650004000-CreateInvoicesTable';
+import { CreateInvoiceEventsTable1741650005000 } from '../../src/infrastructure/db/migrations/1741650005000-CreateInvoiceEventsTable';
+import { CreateAuditEventsTable1741650006000 } from '../../src/infrastructure/db/migrations/1741650006000-CreateAuditEventsTable';
+import { CreateOutboxEventsTable1741650007000 } from '../../src/infrastructure/db/migrations/1741650007000-CreateOutboxEventsTable';
+import { CreateInvoiceNotesTable1741650008000 } from '../../src/infrastructure/db/migrations/1741650008000-CreateInvoiceNotesTable';
+import { AddValidatorIdToInvoices1741650009000 } from '../../src/infrastructure/db/migrations/1741650009000-AddValidatorIdToInvoices';
+import { CreateUserAssignmentsTable1741900000000 } from '../../src/infrastructure/db/migrations/1741900000000-CreateUserAssignmentsTable';
 
 // Load .env from monorepo root (process.cwd() = packages/backend/ when run via pnpm)
 dotenv.config({ path: join(process.cwd(), '../../.env') });
@@ -44,10 +56,16 @@ export async function setup(): Promise<void> {
       ValidatorApproverAssignmentOrmEntity,
     ],
     migrations: [
-      join(
-        process.cwd(),
-        'src/infrastructure/db/migrations/*.{ts,js}',
-      ),
+      CreateUsersTable1741650001000,
+      CreateUserCredentialsTable1741650002000,
+      CreateProvidersTable1741650003000,
+      CreateInvoicesTable1741650004000,
+      CreateInvoiceEventsTable1741650005000,
+      CreateAuditEventsTable1741650006000,
+      CreateOutboxEventsTable1741650007000,
+      CreateInvoiceNotesTable1741650008000,
+      AddValidatorIdToInvoices1741650009000,
+      CreateUserAssignmentsTable1741900000000,
     ],
     synchronize: false,
     logging: false,
