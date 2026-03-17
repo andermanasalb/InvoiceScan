@@ -29,26 +29,17 @@ type AuthFixtures = {
   uploaderPage: Page;
 };
 
-// Module-level cache — persists for the lifetime of the worker process.
-// Since Playwright runs with workers: 1, each role is logged in at most once
-// per test run, avoiding repeated logins that exhaust the rate limit.
-const _loginCache = new Map<string, LoginResult>();
-
-async function getCachedLogin(
-  userKey: keyof typeof PLAYWRIGHT_USERS,
-): Promise<LoginResult> {
-  if (!_loginCache.has(userKey)) {
-    const user = PLAYWRIGHT_USERS[userKey];
-    _loginCache.set(userKey, await apiLogin(user.email, user.password));
-  }
-  return _loginCache.get(userKey)!;
-}
-
 async function buildAuthPage(
   page: Page,
   userKey: keyof typeof PLAYWRIGHT_USERS,
 ): Promise<Page> {
-  const loginResult = await getCachedLogin(userKey);
+  // Fresh login per test — each Playwright test gets a fresh browser context,
+  // so the previous refresh token (issued in another test's context) has already
+  // been rotated by the backend and is no longer valid. Re-logging in guarantees
+  // a brand-new refresh token for this context. LOGIN_RATE_LIMIT=100 in CI gives
+  // enough headroom for the full test suite.
+  const user = PLAYWRIGHT_USERS[userKey];
+  const loginResult = await apiLogin(user.email, user.password);
   await setRefreshCookie(page.context(), loginResult.cookie);
   await injectAuth(page, loginResult);
   return page;

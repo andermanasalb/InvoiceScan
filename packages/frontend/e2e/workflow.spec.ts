@@ -59,7 +59,7 @@ async function uploadInvoice(token: string): Promise<string> {
       'Content-Type': 'multipart/form-data',
     },
   });
-  return (res.data as { data: { id: string } }).data.id;
+  return (res.data as { data: { invoiceId: string } }).data.invoiceId;
 }
 
 async function pollStatus(
