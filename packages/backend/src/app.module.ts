@@ -38,8 +38,7 @@ import { EXPORT_INVOICE_QUEUE } from './infrastructure/queue/export-queue.servic
 
 const config = validateConfig();
 
-// Parseamos REDIS_URL → host + port para BullMQ
-// Formato esperado: redis://localhost:6379
+// Parseamos REDIS_URL → host + port + auth para BullMQ
 const redisUrl = new URL(config.REDIS_URL);
 
 /**
@@ -111,7 +110,7 @@ const bullBoardModules =
         host: redisUrl.hostname,
         port: Number(redisUrl.port) || 6379,
         username: redisUrl.username || undefined,
-        password: redisUrl.password || undefined,
+        password: decodeURIComponent(redisUrl.password) || undefined,
       },
     }),
 
