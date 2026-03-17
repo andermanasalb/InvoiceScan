@@ -24,10 +24,22 @@ config({ path: join(__dirname, '../../.env') });
 
 const GENERIC_PROVIDER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const SEED_USERS = [
-  { email: 'admin@invoicescan.com',     password: 'Admin1234!',     role: 'admin' },
-  { email: 'approver@invoicescan.com',  password: 'Approver1234!',  role: 'approver' },
-  { email: 'validator@invoicescan.com', password: 'Validator1234!', role: 'validator' },
-  { email: 'uploader@invoicescan.com',  password: 'Uploader1234!',  role: 'uploader' },
+  { email: 'admin@invoicescan.com', password: 'Admin1234!', role: 'admin' },
+  {
+    email: 'approver@invoicescan.com',
+    password: 'Approver1234!',
+    role: 'approver',
+  },
+  {
+    email: 'validator@invoicescan.com',
+    password: 'Validator1234!',
+    role: 'validator',
+  },
+  {
+    email: 'uploader@invoicescan.com',
+    password: 'Uploader1234!',
+    role: 'uploader',
+  },
 ];
 
 async function runSeed(ds: DataSource): Promise<void> {
@@ -66,7 +78,9 @@ async function runSeed(ds: DataSource): Promise<void> {
     );
   }
 
-  console.log(`[run-migrations] Seed: ${created} user(s) created, ${SEED_USERS.length - created} already existed.`);
+  console.log(
+    `[run-migrations] Seed: ${created} user(s) created, ${SEED_USERS.length - created} already existed.`,
+  );
 }
 
 async function runMigrations(): Promise<void> {
