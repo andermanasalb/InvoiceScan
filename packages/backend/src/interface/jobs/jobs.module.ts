@@ -41,7 +41,6 @@ import type { InvoiceEventRepository } from '../../domain/repositories/invoice-e
 import type { StoragePort } from '../../application/ports/storage.port';
 import type { AuditPort } from '../../application/ports/audit.port';
 import type { OcrPort } from '../../application/ports/ocr.port';
-import type { LLMPort } from '../../application/ports/llm.port';
 import type { AuditEventRepository } from '../../domain/repositories/audit-event.repository';
 import { ASSIGNMENT_REPOSITORY } from '../../domain/repositories/assignment.repository';
 
