@@ -131,7 +131,6 @@ export async function setRefreshCookie(
       name,
       value,
       url: frontendOrigin,
-      path: '/',
       httpOnly: true,
       secure: false,
       sameSite: 'Lax',
