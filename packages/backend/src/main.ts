@@ -60,4 +60,7 @@ async function bootstrap() {
 
   await app.listen(config.PORT);
 }
-void bootstrap();
+bootstrap().catch((err: unknown) => {
+  console.error('[bootstrap] Fatal error during startup:', err);
+  process.exit(1);
+});
