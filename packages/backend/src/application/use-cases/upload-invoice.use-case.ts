@@ -47,13 +47,25 @@ export class UploadInvoiceUseCase {
     // Assignment check: uploaders must have a full chain (validator + approver).
     // Admins are exempt — they can always upload.
     if (input.uploaderRole === 'uploader') {
-      const validatorId = await this.assignmentRepo.getAssignedValidatorForUploader(input.uploaderId);
+      const validatorId =
+        await this.assignmentRepo.getAssignedValidatorForUploader(
+          input.uploaderId,
+        );
       if (!validatorId) {
-        return err(new NotAssignedError('You are not assigned to a validator. Ask an admin to assign you before uploading.'));
+        return err(
+          new NotAssignedError(
+            'You are not assigned to a validator. Ask an admin to assign you before uploading.',
+          ),
+        );
       }
-      const approverId = await this.assignmentRepo.getAssignedApproverForValidator(validatorId);
+      const approverId =
+        await this.assignmentRepo.getAssignedApproverForValidator(validatorId);
       if (!approverId) {
-        return err(new NotAssignedError('Your assigned validator has no approver. Ask an admin to complete the assignment chain.'));
+        return err(
+          new NotAssignedError(
+            'Your assigned validator has no approver. Ask an admin to complete the assignment chain.',
+          ),
+        );
       }
     }
 

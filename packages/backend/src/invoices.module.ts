@@ -151,7 +151,14 @@ import { ASSIGNMENT_REPOSITORY } from './domain/repositories/assignment.reposito
         auditor: AuditPort,
         queue: InvoiceQueuePort,
         assignmentRepo: AssignmentRepository,
-      ) => new UploadInvoiceUseCase(invoiceRepo, storage, auditor, queue, assignmentRepo),
+      ) =>
+        new UploadInvoiceUseCase(
+          invoiceRepo,
+          storage,
+          auditor,
+          queue,
+          assignmentRepo,
+        ),
       inject: [
         'InvoiceRepository',
         STORAGE_TOKEN,

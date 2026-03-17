@@ -54,9 +54,16 @@ export class SendToApprovalUseCase {
 
     // Assignment check: validators must have an approver assigned
     if (input.validatorRole === 'validator') {
-      const approverId = await this.assignmentRepo.getAssignedApproverForValidator(input.validatorId);
+      const approverId =
+        await this.assignmentRepo.getAssignedApproverForValidator(
+          input.validatorId,
+        );
       if (!approverId) {
-        return err(new NotAssignedError('You are not assigned to an approver. Ask an admin to assign you before sending to approval.'));
+        return err(
+          new NotAssignedError(
+            'You are not assigned to an approver. Ask an admin to assign you before sending to approval.',
+          ),
+        );
       }
     }
 

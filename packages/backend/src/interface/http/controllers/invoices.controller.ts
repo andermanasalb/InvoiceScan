@@ -181,7 +181,11 @@ export class InvoicesController {
 
     const result = await this.uploadInvoiceUseCase.execute({
       uploaderId: user.userId,
-      uploaderRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      uploaderRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
       providerId: parsed.data.providerId,
       fileBuffer: file.buffer,
       mimeType: file.mimetype as 'application/pdf',
@@ -348,7 +352,11 @@ export class InvoicesController {
     const result = await this.rejectInvoiceUseCase.execute({
       invoiceId,
       approverId: user.userId,
-      approverRole: user.role as 'uploader' | 'validator' | 'approver' | 'admin',
+      approverRole: user.role as
+        | 'uploader'
+        | 'validator'
+        | 'approver'
+        | 'admin',
       reason: body.reason,
     });
 

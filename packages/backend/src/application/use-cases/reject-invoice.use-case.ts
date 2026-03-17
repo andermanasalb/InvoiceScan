@@ -51,14 +51,20 @@ export class RejectInvoiceUseCase {
           // - Other non-admins (validator/approver) cannot act on invoices they uploaded.
           if (input.approverRole === 'uploader') {
             if (input.approverId !== invoice.getUploaderId()) {
-              span.setStatus({ code: SpanStatusCode.ERROR, message: 'Self action not allowed' });
+              span.setStatus({
+                code: SpanStatusCode.ERROR,
+                message: 'Self action not allowed',
+              });
               return err(new SelfActionNotAllowedError());
             }
           } else if (
             input.approverRole !== 'admin' &&
             input.approverId === invoice.getUploaderId()
           ) {
-            span.setStatus({ code: SpanStatusCode.ERROR, message: 'Self action not allowed' });
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: 'Self action not allowed',
+            });
             return err(new SelfActionNotAllowedError());
           }
 

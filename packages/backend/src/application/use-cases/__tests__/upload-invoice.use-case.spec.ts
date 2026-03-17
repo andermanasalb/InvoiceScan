@@ -69,7 +69,9 @@ describe('UploadInvoiceUseCase', () => {
       removeValidatorAssignment: vi.fn(),
       getAssignedUploaderIds: vi.fn(),
       getAssignedValidatorIds: vi.fn(),
-      getAssignedValidatorForUploader: vi.fn().mockResolvedValue('validator-id'),
+      getAssignedValidatorForUploader: vi
+        .fn()
+        .mockResolvedValue('validator-id'),
       getAssignedApproverForValidator: vi.fn().mockResolvedValue('approver-id'),
       getFullTree: vi.fn(),
     };
