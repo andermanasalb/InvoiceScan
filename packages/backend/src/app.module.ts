@@ -42,6 +42,7 @@ const config = validateConfig();
 const redisConnection = new IORedis(config.REDIS_URL, {
   maxRetriesPerRequest: null,
   enableReadyCheck: false,
+  family: 0,
 });
 
 /**
