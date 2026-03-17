@@ -67,7 +67,7 @@ test.describe('Invoice list — filtering', () => {
 test.describe('Invoice list — navigation', () => {
   test('Upload Invoice button links to /upload', async ({ uploaderPage: page }) => {
     await page.goto('/invoices');
-    await page.getByRole('main').getByRole('link', { name: /upload invoice/i }).click();
+    await page.getByRole('main').getByRole('link', { name: /upload invoice/i }).first().click();
     await expect(page).toHaveURL(/\/upload/);
   });
 
