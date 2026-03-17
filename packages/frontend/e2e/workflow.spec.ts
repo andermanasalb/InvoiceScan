@@ -144,7 +144,7 @@ test.describe('Workflow — send to approval', () => {
     }
 
     await expect(
-      page.getByText(/ready.for.approval/i),
+      page.getByText(/ready.for.approval/i).first(),
     ).toBeVisible({ timeout: 10_000 });
   });
 });
@@ -186,7 +186,7 @@ test.describe('Workflow — approve', () => {
     await expect(confirmBtn).toBeVisible();
     await confirmBtn.click();
 
-    await expect(page.getByText(/approved/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/approved/i).first()).toBeVisible({ timeout: 10_000 });
   });
 });
 
@@ -227,6 +227,6 @@ test.describe('Workflow — reject', () => {
 
     await page.getByRole('button', { name: /confirm|reject/i }).last().click();
 
-    await expect(page.getByText(/rejected/i)).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/rejected/i).first()).toBeVisible({ timeout: 10_000 });
   });
 });
