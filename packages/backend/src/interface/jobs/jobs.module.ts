@@ -14,7 +14,11 @@ import {
   OCR_TOKEN,
 } from '../../infrastructure/ocr/pdf-parse.adapter';
 import { AIStudioAdapter } from '../../infrastructure/llm/ai-studio.adapter';
-import { LLM_TOKEN, type LLMPort, type LLMExtractionResult } from '../../application/ports/llm.port';
+import {
+  LLM_TOKEN,
+  type LLMPort,
+  type LLMExtractionResult,
+} from '../../application/ports/llm.port';
 import { ok } from 'neverthrow';
 import { INVOICE_EVENT_REPOSITORY } from '../../domain/repositories/invoice-event.repository';
 import { InvoiceApprovedHandler } from '../../infrastructure/events/handlers/invoice-approved.handler';
