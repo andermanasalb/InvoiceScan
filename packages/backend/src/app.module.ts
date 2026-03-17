@@ -23,6 +23,7 @@ import { ExpressAdapter } from '@bull-board/express';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
 import { trace } from '@opentelemetry/api';
+import IORedis from 'ioredis';
 import { DatabaseModule } from './infrastructure/db/database.module';
 import { InvoicesModule } from './invoices.module';
 import { AdminModule } from './admin.module';
@@ -38,7 +39,10 @@ import { EXPORT_INVOICE_QUEUE } from './infrastructure/queue/export-queue.servic
 
 const config = validateConfig();
 
-const redisUrl = new URL(config.REDIS_URL);
+const redisConnection = new IORedis(config.REDIS_URL, {
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+});
 
 /**
  * Bull Board solo se monta fuera de producción.
@@ -105,14 +109,7 @@ const bullBoardModules =
 
     // Configuración global de Redis para BullMQ
     BullModule.forRoot({
-      connection: {
-        host: redisUrl.hostname,
-        port: Number(redisUrl.port) || 6379,
-        ...(redisUrl.password && {
-          password: decodeURIComponent(redisUrl.password),
-        }),
-        ...(redisUrl.username && { username: redisUrl.username }),
-      },
+      connection: redisConnection as never,
     }),
 
     // Bull Board UI — solo activo fuera de producción
