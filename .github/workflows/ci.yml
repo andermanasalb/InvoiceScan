@@ -208,6 +208,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Build backend (required for migration:run)
+        run: pnpm --filter backend build
+
+      - name: Run migrations
+        run: pnpm --filter backend migration:run
+
       - name: Run integration tests
         run: pnpm --filter backend test:integration
 
