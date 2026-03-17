@@ -80,18 +80,16 @@ export async function injectAuth(
   loginResult: LoginResult,
   targetPath = '/dashboard',
 ): Promise<void> {
-  // First visit — page needs to load at least once so JS is running
-  await page.goto('/login', { waitUntil: 'domcontentloaded' });
-
-  await page.evaluate(
+  // Register an init script that runs BEFORE any page scripts on every
+  // navigation in this page (including subsequent test gotos).
+  // This ensures sessionStorage auth metadata and __pw_access_token are
+  // available when auth-context.tsx's getInitialState() executes, so the
+  // access token is injected directly — no silent refresh needed.
+  await page.addInitScript(
     ({ userId, role, email, accessToken }) => {
       sessionStorage.setItem('auth:userId', userId);
       sessionStorage.setItem('auth:role', role);
       sessionStorage.setItem('auth:email', email);
-      // Store token so the axios interceptor picks it up on the
-      // first authenticated request (silent-refresh path).
-      // We expose it via a well-known window property; the interceptor
-      // in api.ts will read it before the first 401 is thrown.
       (window as Record<string, unknown>)['__pw_access_token'] = accessToken;
     },
     {
@@ -102,7 +100,6 @@ export async function injectAuth(
     },
   );
 
-  // Navigate to the actual target page
   await page.goto(targetPath, { waitUntil: 'load' });
 }
 

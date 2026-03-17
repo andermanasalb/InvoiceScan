@@ -67,13 +67,24 @@ function getInitialState(): AuthStateWithInit {
     return defaultState; // SSR — isInitialized: false
   }
 
+  // Playwright test injection: addInitScript sets __pw_access_token before
+  // any page scripts run so we can inject the token directly, bypassing the
+  // silent-refresh flow that depends on the refresh cookie.
+  const win = window as Record<string, unknown>;
+  const pwToken = typeof win['__pw_access_token'] === 'string'
+    ? (win['__pw_access_token'] as string)
+    : null;
+  if (pwToken) {
+    setAccessToken(pwToken);
+  }
+
   const userId = sessionStorage.getItem(SESSION_KEY_USER_ID);
   const role   = sessionStorage.getItem(SESSION_KEY_ROLE) as UserRole | null;
   const email  = sessionStorage.getItem(SESSION_KEY_EMAIL);
 
   if (userId && role) {
     return {
-      accessToken:     null, // se renueva vía silent refresh en la primera petición
+      accessToken:     pwToken, // direct token injection in tests; null in production (silent refresh)
       userId,
       role,
       email,

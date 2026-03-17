@@ -105,7 +105,7 @@ test.describe('Workflow — send to validation', () => {
 
     // Status badge should update to READY_FOR_VALIDATION
     await expect(
-      page.getByText(/needs validation|ready.for.validation/i),
+      page.getByText(/needs validation|ready.for.validation/i).first(),
     ).toBeVisible({ timeout: 10_000 });
   });
 });
