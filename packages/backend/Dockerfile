@@ -27,7 +27,7 @@ RUN pnpm --filter backend build
 
 # Use pnpm deploy to extract production-only deps into a clean directory.
 # This prunes devDeps and hoists only what is needed at runtime.
-RUN pnpm --filter backend deploy --prod /app/deploy
+RUN pnpm --filter backend deploy --prod --legacy /app/deploy
 
 # Copy the compiled dist into the deploy directory
 RUN cp -r packages/backend/dist /app/deploy/dist
